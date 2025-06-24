@@ -447,7 +447,7 @@ const SwissTournamentSimulator = () => {
                                         .map(([count, percentage]) => (
                                             <div key={count} className="flex justify-between text-sm">
                                                 <span>{count} players:</span>
-                                                <span className="font-bold">{percentage}%</span>
+                                                <span className="font-bold">{percentage}% of sims</span>
                                             </div>
                                         ))}
                                 </div>
