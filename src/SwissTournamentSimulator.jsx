@@ -31,7 +31,6 @@ const SwissTournamentSimulator = () => {
     const [rounds, setRounds] = useState(5);
     const [drawChance, setDrawChance] = useState(5);
     const [simulations, setSimulations] = useState(1000);
-    const [allowID, setAllowID] = useState(true);
     const [results, setResults] = useState(null);
     const [bubbleStats, setBubbleStats] = useState(null);
     const [resultsWithID, setResultsWithID] = useState(null);
@@ -354,15 +353,13 @@ const SwissTournamentSimulator = () => {
             setResults(processedResults);
 
 
-            if (allowID) {
-                const idSimResults = [];
-                for (let i = 0; i < simulations; i++) {
-                    idSimResults.push(runTournament(players, rounds, drawChance, true));
-                }
-                const { bubbleStats: bubbleStatsID, processedResults: processedResultsID } = processSimulationResults(idSimResults, simulations, rounds);
-                setBubbleStatsWithID(bubbleStatsID);
-                setResultsWithID(processedResultsID);
+            const idSimResults = [];
+            for (let i = 0; i < simulations; i++) {
+                idSimResults.push(runTournament(players, rounds, drawChance, true));
             }
+            const { bubbleStats: bubbleStatsID, processedResults: processedResultsID } = processSimulationResults(idSimResults, simulations, rounds);
+            setBubbleStatsWithID(bubbleStatsID);
+            setResultsWithID(processedResultsID);
 
 
             setIsRunning(false);
@@ -522,21 +519,6 @@ const SwissTournamentSimulator = () => {
                 </div>
             </div>
 
-            <div className="mb-6 flex justify-center items-center">
-                <div className="flex items-center">
-                    <input
-                        id="allow-id-checkbox"
-                        type="checkbox"
-                        checked={allowID}
-                        onChange={(e) => setAllowID(e.target.checked)}
-                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                    />
-                    <label htmlFor="allow-id-checkbox" className="ml-2 block text-sm text-gray-900">
-                        Allow Intentional Draws (if both players lock Top 8)
-                    </label>
-                </div>
-            </div>
-
             <div className="mb-6 p-4 bg-blue-50 rounded-lg">
                 <h3 className="text-lg font-semibold mb-2">Tournament Info</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
@@ -560,12 +542,12 @@ const SwissTournamentSimulator = () => {
             </button>
 
             {bubbleStats && (
-                <div className={`grid ${allowID && bubbleStatsWithID ? 'md:grid-cols-2 gap-x-12' : 'grid-cols-1'}`}>
+                <div className="grid md:grid-cols-2 gap-x-12">
                     <div>
-                        {allowID && bubbleStatsWithID && <h2 className="text-2xl font-bold mb-4 text-center">Without Intentional Draws</h2>}
+                        <h2 className="text-2xl font-bold mb-4 text-center">Without Intentional Draws</h2>
                         <ResultsDisplay bubbleStats={bubbleStats} results={results} compareRecords={compareRecords} />
                     </div>
-                    {allowID && bubbleStatsWithID && (
+                    {bubbleStatsWithID && (
                         <div>
                             <h2 className="text-2xl font-bold mb-4 text-center">With Intentional Draws</h2>
                             <ResultsDisplay bubbleStats={bubbleStatsWithID} results={resultsWithID} compareRecords={compareRecords} />
