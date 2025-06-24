@@ -37,6 +37,7 @@ const SwissTournamentSimulator = () => {
     const [bubbleStatsID4, setBubbleStatsID4] = useState(null);
     const [resultsID8, setResultsID8] = useState(null);
     const [bubbleStatsID8, setBubbleStatsID8] = useState(null);
+    const [discrepancyStats, setDiscrepancyStats] = useState(null);
     const [isRunning, setIsRunning] = useState(false);
 
     // Swiss tournament pairing function
@@ -74,9 +75,9 @@ const SwissTournamentSimulator = () => {
     };
 
     // Simulate a single match
-    const simulateMatch = (player1, player2, drawPercent, useID = false, allPlayers = [], currentRound = 0, totalRounds = 0, cutSize = 8) => {
+    const simulateMatch = (player1, player2, drawPercent, useID = false, allPlayers = [], currentRound = 0, totalRounds = 0, cutSize = 8, rand) => {
         if (!player2) {
-            // Bye - player gets 3 points
+            // This is handled in processRound now, but kept for safety
             return { winner: player1, loser: null, draw: false, bye: true };
         }
 
@@ -88,7 +89,6 @@ const SwissTournamentSimulator = () => {
             }
         }
 
-        const rand = Math.random() * 100;
         if (rand < drawPercent) {
             return { winner: null, loser: null, draw: true, bye: false };
         } else if (rand < 50 + drawPercent / 2) {
@@ -98,55 +98,19 @@ const SwissTournamentSimulator = () => {
         }
     };
 
-    // Run a single tournament
-    const runTournament = (numPlayers, numRounds, drawPercent, useID = false, cutSize = 8) => {
-        // Initialize players
-        let playerScores = Array.from({ length: numPlayers }, (_, i) => ({
-            id: i,
-            points: 0,
-            wins: 0,
-            losses: 0,
-            draws: 0,
-            opponents: [],
-            opponentWinPercentage: 0
-        }));
-
-        // Run each round
-        for (let round = 1; round <= numRounds; round++) {
-            const pairs = pairPlayers(playerScores);
-
-            pairs.forEach(([p1, p2]) => {
-                const result = simulateMatch(p1, p2, drawPercent, useID, playerScores, round, numRounds, cutSize);
-
-                if (result.bye) {
-                    p1.points += 3;
-                    p1.wins += 1;
-                } else if (result.draw) {
-                    p1.points += 1;
-                    p2.points += 1;
-                    p1.draws += 1;
-                    p2.draws += 1;
-                    p1.opponents.push(p2.id);
-                    p2.opponents.push(p1.id);
-                } else {
-                    result.winner.points += 3;
-                    result.winner.wins += 1;
-                    result.loser.losses += 1;
-                    result.winner.opponents.push(result.loser.id);
-                    result.loser.opponents.push(result.winner.id);
-                }
-            });
-        }
-
+    const rankPlayers = (playerScores) => {
         // Calculate opponent win percentages for tiebreakers
         playerScores.forEach(player => {
             if (player.opponents.length > 0) {
                 const opponentWinPercentages = player.opponents.map(oppId => {
-                    const opponent = playerScores[oppId];
+                    const opponent = playerScores[oppId]; // Direct lookup
+                    if (!opponent) return 0; // Should not happen in a consistent state
                     const totalGames = opponent.wins + opponent.losses + opponent.draws;
                     return totalGames > 0 ? (opponent.wins + opponent.draws * 0.5) / totalGames : 0;
                 });
                 player.opponentWinPercentage = opponentWinPercentages.reduce((sum, pct) => sum + pct, 0) / opponentWinPercentages.length;
+            } else {
+                player.opponentWinPercentage = 0;
             }
         });
 
@@ -162,6 +126,39 @@ const SwissTournamentSimulator = () => {
 
         return rankedPlayers;
     };
+
+    const processRound = (playerScores, pairs, drawPercent, useID, cutSize, round, numRounds, getMatchOutcome) => {
+        pairs.forEach(([p1, p2]) => {
+            // Handle bye case first
+            if (!p2) {
+                playerScores[p1.id].points += 3;
+                playerScores[p1.id].wins += 1;
+                return;
+            }
+
+            const rand = getMatchOutcome(p1, p2);
+            // We pass the original p1/p2 from pairings to simulateMatch for its logic
+            const result = simulateMatch(p1, p2, drawPercent, useID, playerScores, round, numRounds, cutSize, rand);
+
+            if (result.draw) {
+                playerScores[p1.id].points += 1;
+                playerScores[p2.id].points += 1;
+                playerScores[p1.id].draws += 1;
+                playerScores[p2.id].draws += 1;
+                playerScores[p1.id].opponents.push(p2.id);
+                playerScores[p2.id].opponents.push(p1.id);
+            } else { // Win/Loss
+                playerScores[result.winner.id].points += 3;
+                playerScores[result.winner.id].wins += 1;
+                playerScores[result.loser.id].losses += 1;
+                playerScores[result.winner.id].opponents.push(result.loser.id);
+                playerScores[result.loser.id].opponents.push(result.winner.id);
+            }
+        });
+    };
+
+    // Run a single tournament - THIS IS NOW OBSOLETE AND REMOVED
+    // const runTournament = ...
 
     // Helper function to get record string
     const getRecordString = (player) => {
@@ -338,39 +335,137 @@ const SwissTournamentSimulator = () => {
         setBubbleStatsID4(null);
         setResultsID8(null);
         setBubbleStatsID8(null);
+        setDiscrepancyStats(null);
 
 
         // Use setTimeout to allow UI to update
         setTimeout(() => {
-            // --- 1. Standard Simulation (No ID) ---
-            const standardSimResults = [];
+            const finalStandardResults = [];
+            const finalId4Results = [];
+            const finalId8Results = [];
+
             for (let i = 0; i < simulations; i++) {
-                standardSimResults.push(runTournament(players, rounds, drawChance, false));
+                // Initialize three identical states for this single simulation run
+                let players_standard = Array.from({ length: players }, (_, j) => ({ id: j, points: 0, wins: 0, losses: 0, draws: 0, opponents: [], opponentWinPercentage: 0 }));
+                let players_id4 = JSON.parse(JSON.stringify(players_standard));
+                let players_id8 = JSON.parse(JSON.stringify(players_standard));
+
+                // Round-by-round simulation for all three states in lockstep
+                for (let round = 1; round <= rounds; round++) {
+                    // Pairings can diverge, so calculate them for each state
+                    const pairs_standard = pairPlayers(players_standard);
+                    const pairs_id4 = pairPlayers(players_id4);
+                    const pairs_id8 = pairPlayers(players_id8);
+
+                    // Create a map for this round's outcomes, generated on-demand.
+                    const roundOutcomes = new Map();
+                    const getMatchOutcome = (p1, p2) => {
+                        if (!p1 || !p2) return 0;
+                        // Create a canonical key for the pair to ensure order doesn't matter.
+                        const key = p1.id < p2.id ? `${p1.id}-${p2.id}` : `${p2.id}-${p1.id}`;
+                        if (!roundOutcomes.has(key)) {
+                            // If we haven't seen this pair this round, generate and store their outcome.
+                            roundOutcomes.set(key, Math.random() * 100);
+                        }
+                        return roundOutcomes.get(key);
+                    };
+
+                    // Now, process the rounds for each state using the same outcome function.
+                    // The first time a pair is seen, its outcome is generated and stored.
+                    // Subsequent requests for the same pair get the stored outcome.
+                    processRound(players_standard, pairs_standard, drawChance, false, 0, round, rounds, getMatchOutcome);
+                    processRound(players_id4, pairs_id4, drawChance, true, 4, round, rounds, getMatchOutcome);
+                    processRound(players_id8, pairs_id8, drawChance, true, 8, round, rounds, getMatchOutcome);
+                }
+
+                // After all rounds, rank the players for each state
+                finalStandardResults.push(rankPlayers(players_standard));
+                finalId4Results.push(rankPlayers(players_id4));
+                finalId8Results.push(rankPlayers(players_id8));
             }
 
-            const { bubbleStats, processedResults } = processSimulationResults(standardSimResults, simulations, rounds);
+
+            // --- Discrepancy Calculation ---
+            const top4DiscrepancyCounts = [];
+            const top8DiscrepancyCounts = [];
+
+            for (let i = 0; i < simulations; i++) {
+                const standardResult = finalStandardResults[i];
+                const id4Result = finalId4Results[i];
+                const id8Result = finalId8Results[i];
+
+                const standardTop4Ids = new Set(standardResult.slice(0, 4).map(p => p.id));
+                const id4Top4Ids = new Set(id4Result.slice(0, 4).map(p => p.id));
+                let top4Discrepancy = 0;
+                for (const playerId of standardTop4Ids) {
+                    if (!id4Top4Ids.has(playerId)) {
+                        top4Discrepancy++;
+                    }
+                }
+                top4DiscrepancyCounts.push(top4Discrepancy);
+
+                const standardTop8Ids = new Set(standardResult.slice(0, 8).map(p => p.id));
+                const id8Top8Ids = new Set(id8Result.slice(0, 8).map(p => p.id));
+                let top8Discrepancy = 0;
+                for (const playerId of standardTop8Ids) {
+                    if (!id8Top8Ids.has(playerId)) {
+                        top8Discrepancy++;
+                    }
+                }
+                top8DiscrepancyCounts.push(top8Discrepancy);
+            }
+
+
+            // --- Process Results ---
+            const { bubbleStats, processedResults } = processSimulationResults(finalStandardResults, simulations, rounds);
             setBubbleStats(bubbleStats);
             setResults(processedResults);
 
-
-            // --- 2. ID for Top 4 Simulation ---
-            const id4SimResults = [];
-            for (let i = 0; i < simulations; i++) {
-                id4SimResults.push(runTournament(players, rounds, drawChance, true, 4));
-            }
-            const { bubbleStats: bubbleStatsID4, processedResults: processedResultsID4 } = processSimulationResults(id4SimResults, simulations, rounds);
+            const { bubbleStats: bubbleStatsID4, processedResults: processedResultsID4 } = processSimulationResults(finalId4Results, simulations, rounds);
             setBubbleStatsID4(bubbleStatsID4);
             setResultsID4(processedResultsID4);
 
-
-            // --- 3. ID for Top 8 Simulation ---
-            const id8SimResults = [];
-            for (let i = 0; i < simulations; i++) {
-                id8SimResults.push(runTournament(players, rounds, drawChance, true, 8));
-            }
-            const { bubbleStats: bubbleStatsID8, processedResults: processedResultsID8 } = processSimulationResults(id8SimResults, simulations, rounds);
+            const { bubbleStats: bubbleStatsID8, processedResults: processedResultsID8 } = processSimulationResults(finalId8Results, simulations, rounds);
             setBubbleStatsID8(bubbleStatsID8);
             setResultsID8(processedResultsID8);
+
+            // --- Process Discrepancy Stats ---
+            const calculateDiscrepancyStats = (counts) => {
+                if (counts.length === 0) {
+                    return { average: '0.00', median: '0.00', distribution: {} };
+                }
+                const sortedCounts = [...counts].sort((a, b) => a - b);
+                const mid = Math.floor(sortedCounts.length / 2);
+                const median = sortedCounts.length % 2 !== 0 ? sortedCounts[mid] : (sortedCounts[mid - 1] + sortedCounts[mid]) / 2;
+                const total = counts.reduce((sum, count) => sum + count, 0);
+                const average = total / counts.length;
+
+                const cdfPercentages = {};
+
+                // "No one pushed out" (PMF for 0)
+                const zeroCount = counts.filter(c => c === 0).length;
+                cdfPercentages[0] = (zeroCount / simulations * 100).toFixed(1);
+
+                // "N or more" (1 - CDF)
+                const maxCount = Math.max(0, ...counts);
+                for (let i = 1; i <= maxCount; i++) {
+                    const countAtOrAbove = counts.filter(c => c >= i).length;
+                    if (countAtOrAbove > 0) {
+                        cdfPercentages[i] = (countAtOrAbove / simulations * 100).toFixed(1);
+                    }
+                }
+
+                return {
+                    average: average.toFixed(2),
+                    median: median.toFixed(2),
+                    distribution: cdfPercentages,
+                };
+            };
+
+            setDiscrepancyStats({
+                top4: calculateDiscrepancyStats(top4DiscrepancyCounts),
+                top8: calculateDiscrepancyStats(top8DiscrepancyCounts),
+            });
 
 
             setIsRunning(false);
@@ -542,6 +637,63 @@ const SwissTournamentSimulator = () => {
             >
                 {isRunning ? 'Running Simulation...' : 'Run Simulation'}
             </button>
+
+            {discrepancyStats && (
+                <div className="bg-white p-6 rounded-lg border-2 border-red-200 mb-6">
+                    <h2 className="text-2xl font-bold mb-4 text-red-600"># missing bracket due to intentional draws</h2>
+                    <p className="text-sm text-gray-600 mb-4">
+                        This shows how many players would have made a top cut without Intentional Draws (IDs), but were pushed out when IDs were allowed. It measures the negative impact of strategic drawing on players who play out their matches.
+                    </p>
+                    <div className="grid md:grid-cols-2 gap-x-12">
+                        {/* Top 4 Discrepancy */}
+                        <div className="bg-red-50 p-4 rounded-lg">
+                            <h4 className="text-lg font-semibold mb-3">Top 4 "Pushed Out" Players (due to IDs)</h4>
+                            <div className="space-y-2 text-sm mb-4">
+                                <div className="flex justify-between"><span>Average players pushed out:</span><span className="font-bold">{discrepancyStats.top4.average}</span></div>
+                                <div className="flex justify-between"><span>Median players pushed out:</span><span className="font-bold">{discrepancyStats.top4.median}</span></div>
+                            </div>
+                            <h5 className="font-semibold mb-2 text-gray-800">Distribution of Pushed Out Players</h5>
+                            <div className="space-y-1 max-h-48 overflow-y-auto text-sm">
+                                {Object.entries(discrepancyStats.top4.distribution)
+                                    .sort(([a], [b]) => parseInt(a) - parseInt(b))
+                                    .map(([count, percentage]) => (
+                                        <div key={count} className="flex justify-between">
+                                            <span>{
+                                                count === '0'
+                                                    ? 'No one pushed out'
+                                                    : `${count} or more player${parseInt(count) === 1 ? '' : 's'}`
+                                            }:</span>
+                                            <span className="font-bold">{percentage}% of sims</span>
+                                        </div>
+                                    ))}
+                            </div>
+                        </div>
+                        {/* Top 8 Discrepancy */}
+                        <div className="bg-red-50 p-4 rounded-lg">
+                            <h4 className="text-lg font-semibold mb-3">Top 8 "Pushed Out" Players (due to IDs)</h4>
+                            <div className="space-y-2 text-sm mb-4">
+                                <div className="flex justify-between"><span>Average players pushed out:</span><span className="font-bold">{discrepancyStats.top8.average}</span></div>
+                                <div className="flex justify-between"><span>Median players pushed out:</span><span className="font-bold">{discrepancyStats.top8.median}</span></div>
+                            </div>
+                            <h5 className="font-semibold mb-2 text-gray-800">Distribution of Pushed Out Players</h5>
+                            <div className="space-y-1 max-h-48 overflow-y-auto text-sm">
+                                {Object.entries(discrepancyStats.top8.distribution)
+                                    .sort(([a], [b]) => parseInt(a) - parseInt(b))
+                                    .map(([count, percentage]) => (
+                                        <div key={count} className="flex justify-between">
+                                            <span>{
+                                                count === '0'
+                                                    ? 'No one pushed out'
+                                                    : `${count} or more player${parseInt(count) === 1 ? '' : 's'}`
+                                            }:</span>
+                                            <span className="font-bold">{percentage}% of sims</span>
+                                        </div>
+                                    ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {bubbleStats && (
                 <>
