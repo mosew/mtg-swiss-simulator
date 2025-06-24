@@ -30,11 +30,13 @@ const SwissTournamentSimulator = () => {
     const [players, setPlayers] = useState(32);
     const [rounds, setRounds] = useState(5);
     const [drawChance, setDrawChance] = useState(5);
-    const [simulations, setSimulations] = useState(1000);
+    const [simulations, setSimulations] = useState(10000);
     const [results, setResults] = useState(null);
     const [bubbleStats, setBubbleStats] = useState(null);
-    const [resultsWithID, setResultsWithID] = useState(null);
-    const [bubbleStatsWithID, setBubbleStatsWithID] = useState(null);
+    const [resultsID4, setResultsID4] = useState(null);
+    const [bubbleStatsID4, setBubbleStatsID4] = useState(null);
+    const [resultsID8, setResultsID8] = useState(null);
+    const [bubbleStatsID8, setBubbleStatsID8] = useState(null);
     const [isRunning, setIsRunning] = useState(false);
 
     // Swiss tournament pairing function
@@ -72,15 +74,15 @@ const SwissTournamentSimulator = () => {
     };
 
     // Simulate a single match
-    const simulateMatch = (player1, player2, drawPercent, useID = false, allPlayers = [], currentRound = 0, totalRounds = 0) => {
+    const simulateMatch = (player1, player2, drawPercent, useID = false, allPlayers = [], currentRound = 0, totalRounds = 0, cutSize = 8) => {
         if (!player2) {
             // Bye - player gets 3 points
             return { winner: player1, loser: null, draw: false, bye: true };
         }
 
         if (useID && totalRounds > 0 && totalRounds - currentRound <= 2) {
-            const p1Safe = isSafeForCut(player1, player2, allPlayers, 8, currentRound, totalRounds);
-            const p2Safe = isSafeForCut(player2, player1, allPlayers, 8, currentRound, totalRounds);
+            const p1Safe = isSafeForCut(player1, player2, allPlayers, cutSize, currentRound, totalRounds);
+            const p2Safe = isSafeForCut(player2, player1, allPlayers, cutSize, currentRound, totalRounds);
             if (p1Safe && p2Safe) {
                 return { winner: null, loser: null, draw: true, bye: false };
             }
@@ -97,7 +99,7 @@ const SwissTournamentSimulator = () => {
     };
 
     // Run a single tournament
-    const runTournament = (numPlayers, numRounds, drawPercent, useID = false) => {
+    const runTournament = (numPlayers, numRounds, drawPercent, useID = false, cutSize = 8) => {
         // Initialize players
         let playerScores = Array.from({ length: numPlayers }, (_, i) => ({
             id: i,
@@ -114,7 +116,7 @@ const SwissTournamentSimulator = () => {
             const pairs = pairPlayers(playerScores);
 
             pairs.forEach(([p1, p2]) => {
-                const result = simulateMatch(p1, p2, drawPercent, useID, playerScores, round, numRounds);
+                const result = simulateMatch(p1, p2, drawPercent, useID, playerScores, round, numRounds, cutSize);
 
                 if (result.bye) {
                     p1.points += 3;
@@ -256,7 +258,6 @@ const SwissTournamentSimulator = () => {
                 return {
                     average: (0).toFixed(2),
                     median: (0).toFixed(2),
-                    max: 0,
                     frequency: (0).toFixed(1),
                     distribution: {}
                 };
@@ -267,7 +268,6 @@ const SwissTournamentSimulator = () => {
             const median = sortedSizes.length % 2 !== 0 ? sortedSizes[mid] : (sortedSizes[mid - 1] + sortedSizes[mid]) / 2;
             const totalBubblePlayers = bubbleSizes.reduce((sum, size) => sum + size, 0);
             const average = totalBubblePlayers / bubbleSizes.length;
-            const max = sortedSizes[sortedSizes.length - 1];
             const frequency = (bubbleSizes.filter(size => size > 0).length / bubbleSizes.length) * 100;
 
             const distributionCounts = {};
@@ -280,11 +280,9 @@ const SwissTournamentSimulator = () => {
                 distributionPercentages[size] = (distributionCounts[size] / numSimulations * 100).toFixed(1);
             });
 
-
             return {
                 average: average.toFixed(2),
                 median: median.toFixed(2),
-                max,
                 frequency: frequency.toFixed(1),
                 distribution: distributionPercentages,
             };
@@ -336,13 +334,15 @@ const SwissTournamentSimulator = () => {
         setIsRunning(true);
         setResults(null);
         setBubbleStats(null);
-        setResultsWithID(null);
-        setBubbleStatsWithID(null);
+        setResultsID4(null);
+        setBubbleStatsID4(null);
+        setResultsID8(null);
+        setBubbleStatsID8(null);
 
 
         // Use setTimeout to allow UI to update
         setTimeout(() => {
-            // --- Refactored Simulation Logic ---
+            // --- 1. Standard Simulation (No ID) ---
             const standardSimResults = [];
             for (let i = 0; i < simulations; i++) {
                 standardSimResults.push(runTournament(players, rounds, drawChance, false));
@@ -353,13 +353,24 @@ const SwissTournamentSimulator = () => {
             setResults(processedResults);
 
 
-            const idSimResults = [];
+            // --- 2. ID for Top 4 Simulation ---
+            const id4SimResults = [];
             for (let i = 0; i < simulations; i++) {
-                idSimResults.push(runTournament(players, rounds, drawChance, true));
+                id4SimResults.push(runTournament(players, rounds, drawChance, true, 4));
             }
-            const { bubbleStats: bubbleStatsID, processedResults: processedResultsID } = processSimulationResults(idSimResults, simulations, rounds);
-            setBubbleStatsWithID(bubbleStatsID);
-            setResultsWithID(processedResultsID);
+            const { bubbleStats: bubbleStatsID4, processedResults: processedResultsID4 } = processSimulationResults(id4SimResults, simulations, rounds);
+            setBubbleStatsID4(bubbleStatsID4);
+            setResultsID4(processedResultsID4);
+
+
+            // --- 3. ID for Top 8 Simulation ---
+            const id8SimResults = [];
+            for (let i = 0; i < simulations; i++) {
+                id8SimResults.push(runTournament(players, rounds, drawChance, true, 8));
+            }
+            const { bubbleStats: bubbleStatsID8, processedResults: processedResultsID8 } = processSimulationResults(id8SimResults, simulations, rounds);
+            setBubbleStatsID8(bubbleStatsID8);
+            setResultsID8(processedResultsID8);
 
 
             setIsRunning(false);
@@ -373,10 +384,6 @@ const SwissTournamentSimulator = () => {
         <>
             {bubbleStats && (
                 <div className="bg-white p-6 rounded-lg border mb-6">
-                    <h3 className="text-2xl font-bold mb-4 text-purple-600">Bubble Analysis</h3>
-                    <p className="text-sm text-gray-600 mb-6">
-                        This analyzes how often players miss a top spot (like Top 4 or Top 8) due to tiebreakers, even when they have the same point total as a player who made the cut. The "bubble" is the number of players ranked just outside the cut-off with the same points.
-                    </p>
                     <div className="grid grid-cols-1 gap-6">
                         {/* Top 4 Bubble */}
                         <div className="bg-gray-50 p-4 rounded-lg">
@@ -384,7 +391,6 @@ const SwissTournamentSimulator = () => {
                             <div className="space-y-2 text-sm mb-4">
                                 <div className="flex justify-between"><span>Average players on bubble:</span><span className="font-bold">{bubbleStats.top4.average}</span></div>
                                 <div className="flex justify-between"><span>Median players on bubble:</span><span className="font-bold">{bubbleStats.top4.median}</span></div>
-                                <div className="flex justify-between"><span>Most players on bubble (one sim):</span><span className="font-bold">{bubbleStats.top4.max}</span></div>
                                 <div className="flex justify-between"><span>Chance of a bubble occurring:</span><span className="font-bold">{bubbleStats.top4.frequency}%</span></div>
                             </div>
                             <h5 className="font-semibold mb-2 text-gray-800">Distribution of Bubble Sizes</h5>
@@ -405,7 +411,6 @@ const SwissTournamentSimulator = () => {
                             <div className="space-y-2 text-sm mb-4">
                                 <div className="flex justify-between"><span>Average players on bubble:</span><span className="font-bold">{bubbleStats.top8.average}</span></div>
                                 <div className="flex justify-between"><span>Median players on bubble:</span><span className="font-bold">{bubbleStats.top8.median}</span></div>
-                                <div className="flex justify-between"><span>Most players on bubble (one sim):</span><span className="font-bold">{bubbleStats.top8.max}</span></div>
                                 <div className="flex justify-between"><span>Chance of a bubble occurring:</span><span className="font-bold">{bubbleStats.top8.frequency}%</span></div>
                             </div>
                             <h5 className="font-semibold mb-2 text-gray-800">Distribution of Bubble Sizes</h5>
@@ -472,7 +477,7 @@ const SwissTournamentSimulator = () => {
                         onChange={(e) => setPlayers(Math.max(2, parseInt(e.target.value) || 2))}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                         min="2"
-                        max="1000"
+                        max="10000"
                     />
                 </div>
 
@@ -542,18 +547,36 @@ const SwissTournamentSimulator = () => {
             </button>
 
             {bubbleStats && (
-                <div className="grid md:grid-cols-2 gap-x-12">
-                    <div>
-                        <h2 className="text-2xl font-bold mb-4 text-center">Without Intentional Draws</h2>
-                        <ResultsDisplay bubbleStats={bubbleStats} results={results} compareRecords={compareRecords} />
+                <>
+                    <div className="bg-white p-6 rounded-lg border mb-6">
+                        <h3 className="text-2xl font-bold mb-4 text-purple-600">Bubble Analysis</h3>
+                        <p className="text-sm text-gray-600 mb-4">
+                            This analyzes how often players miss a top spot (like Top 4 or Top 8) due to tiebreakers, even when they have the same point total as a player who made the cut. The "bubble" is the number of players ranked just outside the cut-off with the same points.
+                        </p>
+                        <p className="text-sm text-gray-600">
+                            The "With Intentional Draws" simulation models a scenario where players draw if it guarantees a top spot. The Top 4 analysis assumes players aim for a Top 4 cut, and the Top 8 analysis assumes they aim for a Top 8 cut.
+                        </p>
                     </div>
-                    {bubbleStatsWithID && (
+                    <div className="grid md:grid-cols-2 gap-x-12">
                         <div>
-                            <h2 className="text-2xl font-bold mb-4 text-center">With Intentional Draws</h2>
-                            <ResultsDisplay bubbleStats={bubbleStatsWithID} results={resultsWithID} compareRecords={compareRecords} />
+                            <h2 className="text-2xl font-bold mb-4 text-center">Without Intentional Draws</h2>
+                            <ResultsDisplay bubbleStats={bubbleStats} results={results} compareRecords={compareRecords} />
                         </div>
-                    )}
-                </div>
+                        {bubbleStatsID4 && bubbleStatsID8 && (
+                            <div>
+                                <h2 className="text-2xl font-bold mb-4 text-center">With Intentional Draws</h2>
+                                <ResultsDisplay
+                                    bubbleStats={{
+                                        top4: bubbleStatsID4.top4,
+                                        top8: bubbleStatsID8.top8,
+                                    }}
+                                    results={resultsID8}
+                                    compareRecords={compareRecords}
+                                />
+                            </div>
+                        )}
+                    </div>
+                </>
             )}
         </div>
     );
