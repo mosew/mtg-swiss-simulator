@@ -1,12 +1,41 @@
 import React, { useState } from 'react';
 
+const isSafeForCut = (player, opponent, allPlayers, cut, currentRound, totalRounds) => {
+    const playerScoreAfterDraw = player.points + 1;
+    const minFinalPlayerScore = playerScoreAfterDraw; // Assumes losing all remaining matches
+
+    let potentialPassers = 0;
+    for (const p of allPlayers) {
+        if (p.id === player.id) continue;
+
+        let maxPossibleScore;
+        // For the opponent in the match, they also get 1 point from the draw.
+        if (p.id === opponent.id) {
+            maxPossibleScore = p.points + 1 + 3 * (totalRounds - currentRound);
+        } else {
+            // Other players can win their matches in this and all subsequent rounds.
+            maxPossibleScore = p.points + 3 * (totalRounds - (currentRound - 1));
+        }
+
+        // We assume worst-case for tiebreakers, so if scores can be equal, they can pass.
+        if (maxPossibleScore >= minFinalPlayerScore) {
+            potentialPassers++;
+        }
+    }
+
+    return potentialPassers < cut;
+};
+
 const SwissTournamentSimulator = () => {
     const [players, setPlayers] = useState(32);
     const [rounds, setRounds] = useState(5);
     const [drawChance, setDrawChance] = useState(5);
     const [simulations, setSimulations] = useState(1000);
+    const [allowID, setAllowID] = useState(true);
     const [results, setResults] = useState(null);
     const [bubbleStats, setBubbleStats] = useState(null);
+    const [resultsWithID, setResultsWithID] = useState(null);
+    const [bubbleStatsWithID, setBubbleStatsWithID] = useState(null);
     const [isRunning, setIsRunning] = useState(false);
 
     // Swiss tournament pairing function
@@ -44,10 +73,18 @@ const SwissTournamentSimulator = () => {
     };
 
     // Simulate a single match
-    const simulateMatch = (player1, player2, drawPercent) => {
+    const simulateMatch = (player1, player2, drawPercent, useID = false, allPlayers = [], currentRound = 0, totalRounds = 0) => {
         if (!player2) {
             // Bye - player gets 3 points
             return { winner: player1, loser: null, draw: false, bye: true };
+        }
+
+        if (useID && totalRounds > 0 && totalRounds - currentRound <= 2) {
+            const p1Safe = isSafeForCut(player1, player2, allPlayers, 8, currentRound, totalRounds);
+            const p2Safe = isSafeForCut(player2, player1, allPlayers, 8, currentRound, totalRounds);
+            if (p1Safe && p2Safe) {
+                return { winner: null, loser: null, draw: true, bye: false };
+            }
         }
 
         const rand = Math.random() * 100;
@@ -61,7 +98,7 @@ const SwissTournamentSimulator = () => {
     };
 
     // Run a single tournament
-    const runTournament = (numPlayers, numRounds, drawPercent) => {
+    const runTournament = (numPlayers, numRounds, drawPercent, useID = false) => {
         // Initialize players
         let playerScores = Array.from({ length: numPlayers }, (_, i) => ({
             id: i,
@@ -74,11 +111,11 @@ const SwissTournamentSimulator = () => {
         }));
 
         // Run each round
-        for (let round = 0; round < numRounds; round++) {
+        for (let round = 1; round <= numRounds; round++) {
             const pairs = pairPlayers(playerScores);
 
             pairs.forEach(([p1, p2]) => {
-                const result = simulateMatch(p1, p2, drawPercent);
+                const result = simulateMatch(p1, p2, drawPercent, useID, playerScores, round, numRounds);
 
                 if (result.bye) {
                     p1.points += 3;
@@ -178,136 +215,156 @@ const SwissTournamentSimulator = () => {
         return aDraws - bDraws;
     };
 
+    const processSimulationResults = (allSimResults, numSimulations, numRounds) => {
+        // 2. Process Bubble Analysis from all results
+        const top4Bubbles = [];
+        const top8Bubbles = [];
+
+        allSimResults.forEach(tournamentResult => {
+            if (tournamentResult.length >= 4) {
+                const fourthPlacePoints = tournamentResult[3].points;
+                let top4Bubble = 0;
+                for (let i = 4; i < tournamentResult.length; i++) {
+                    if (tournamentResult[i].points === fourthPlacePoints) {
+                        top4Bubble++;
+                    } else {
+                        break; // Players are sorted by points
+                    }
+                }
+                top4Bubbles.push(top4Bubble);
+            } else {
+                top4Bubbles.push(0);
+            }
+
+            if (tournamentResult.length >= 8) {
+                const eighthPlacePoints = tournamentResult[7].points;
+                let top8Bubble = 0;
+                for (let i = 8; i < tournamentResult.length; i++) {
+                    if (tournamentResult[i].points === eighthPlacePoints) {
+                        top8Bubble++;
+                    } else {
+                        break;
+                    }
+                }
+                top8Bubbles.push(top8Bubble);
+            } else {
+                top8Bubbles.push(0);
+            }
+        });
+
+        const calculateBubbleStats = (bubbleSizes) => {
+            if (bubbleSizes.length === 0) {
+                return {
+                    average: (0).toFixed(2),
+                    median: (0).toFixed(2),
+                    max: 0,
+                    frequency: (0).toFixed(1),
+                    distribution: {}
+                };
+            }
+
+            const sortedSizes = [...bubbleSizes].sort((a, b) => a - b);
+            const mid = Math.floor(sortedSizes.length / 2);
+            const median = sortedSizes.length % 2 !== 0 ? sortedSizes[mid] : (sortedSizes[mid - 1] + sortedSizes[mid]) / 2;
+            const totalBubblePlayers = bubbleSizes.reduce((sum, size) => sum + size, 0);
+            const average = totalBubblePlayers / bubbleSizes.length;
+            const max = sortedSizes[sortedSizes.length - 1];
+            const frequency = (bubbleSizes.filter(size => size > 0).length / bubbleSizes.length) * 100;
+
+            const distributionCounts = {};
+            bubbleSizes.forEach(size => {
+                distributionCounts[size] = (distributionCounts[size] || 0) + 1;
+            });
+
+            const distributionPercentages = {};
+            Object.keys(distributionCounts).forEach(size => {
+                distributionPercentages[size] = (distributionCounts[size] / numSimulations * 100).toFixed(1);
+            });
+
+
+            return {
+                average: average.toFixed(2),
+                median: median.toFixed(2),
+                max,
+                frequency: frequency.toFixed(1),
+                distribution: distributionPercentages,
+            };
+        };
+
+        const bubbleStatsResult = {
+            top4: calculateBubbleStats(top4Bubbles),
+            top8: calculateBubbleStats(top8Bubbles),
+        };
+
+
+        // 3. Process Record Analysis from all results
+        const processedResults = {};
+        const targetRecords = [`${numRounds}-0`, `${numRounds - 1}-0-1`, `${numRounds - 1}-1`, `${numRounds - 2}-1-1`, `${numRounds - 2}-2`];
+
+        targetRecords.forEach(record => {
+            const recordAndBetterCounts = allSimResults.map(tournamentResult => {
+                return tournamentResult.filter(p => {
+                    const playerRecord = getRecordString(p);
+                    const targetRecord = isTargetRecord(playerRecord);
+                    return targetRecord && compareRecords(targetRecord, record) <= 0;
+                }).length;
+            });
+
+            const distribution = {};
+            recordAndBetterCounts.forEach(count => {
+                if (count > 0) { // Only show distributions for non-zero counts
+                    distribution[count] = (distribution[count] || 0) + 1;
+                }
+            });
+
+            if (Object.keys(distribution).length > 0) {
+                const percentages = {};
+                Object.keys(distribution).forEach(count => {
+                    percentages[count] = (distribution[count] / numSimulations * 100).toFixed(1);
+                });
+                processedResults[record] = {
+                    recordAndBetterDistribution: percentages
+                };
+            }
+        });
+
+
+        return { bubbleStats: bubbleStatsResult, processedResults };
+    }
+
     // Run multiple simulations
     const runSimulations = () => {
         setIsRunning(true);
         setResults(null);
         setBubbleStats(null);
+        setResultsWithID(null);
+        setBubbleStatsWithID(null);
+
 
         // Use setTimeout to allow UI to update
         setTimeout(() => {
             // --- Refactored Simulation Logic ---
-
-            // 1. Run all simulations first and store the results
-            const allSimResults = [];
+            const standardSimResults = [];
             for (let i = 0; i < simulations; i++) {
-                allSimResults.push(runTournament(players, rounds, drawChance));
+                standardSimResults.push(runTournament(players, rounds, drawChance, false));
             }
 
-            // 2. Process Bubble Analysis from all results
-            const top4Bubbles = [];
-            const top8Bubbles = [];
-
-            allSimResults.forEach(tournamentResult => {
-                if (tournamentResult.length >= 4) {
-                    const fourthPlacePoints = tournamentResult[3].points;
-                    let top4Bubble = 0;
-                    for (let i = 4; i < tournamentResult.length; i++) {
-                        if (tournamentResult[i].points === fourthPlacePoints) {
-                            top4Bubble++;
-                        } else {
-                            break; // Players are sorted by points
-                        }
-                    }
-                    top4Bubbles.push(top4Bubble);
-                } else {
-                    top4Bubbles.push(0);
-                }
-
-                if (tournamentResult.length >= 8) {
-                    const eighthPlacePoints = tournamentResult[7].points;
-                    let top8Bubble = 0;
-                    for (let i = 8; i < tournamentResult.length; i++) {
-                        if (tournamentResult[i].points === eighthPlacePoints) {
-                            top8Bubble++;
-                        } else {
-                            break;
-                        }
-                    }
-                    top8Bubbles.push(top8Bubble);
-                } else {
-                    top8Bubbles.push(0);
-                }
-            });
-
-            const calculateBubbleStats = (bubbleSizes) => {
-                if (bubbleSizes.length === 0) {
-                    return {
-                        average: (0).toFixed(2),
-                        median: (0).toFixed(2),
-                        max: 0,
-                        frequency: (0).toFixed(1),
-                        distribution: {}
-                    };
-                }
-
-                const sortedSizes = [...bubbleSizes].sort((a, b) => a - b);
-                const mid = Math.floor(sortedSizes.length / 2);
-                const median = sortedSizes.length % 2 !== 0 ? sortedSizes[mid] : (sortedSizes[mid - 1] + sortedSizes[mid]) / 2;
-                const totalBubblePlayers = bubbleSizes.reduce((sum, size) => sum + size, 0);
-                const average = totalBubblePlayers / bubbleSizes.length;
-                const max = sortedSizes[sortedSizes.length - 1];
-                const frequency = (bubbleSizes.filter(size => size > 0).length / bubbleSizes.length) * 100;
-
-                const distributionCounts = {};
-                bubbleSizes.forEach(size => {
-                    distributionCounts[size] = (distributionCounts[size] || 0) + 1;
-                });
-
-                const distributionPercentages = {};
-                Object.keys(distributionCounts).forEach(size => {
-                    distributionPercentages[size] = (distributionCounts[size] / simulations * 100).toFixed(1);
-                });
-
-
-                return {
-                    average: average.toFixed(2),
-                    median: median.toFixed(2),
-                    max,
-                    frequency: frequency.toFixed(1),
-                    distribution: distributionPercentages,
-                };
-            };
-
-            setBubbleStats({
-                top4: calculateBubbleStats(top4Bubbles),
-                top8: calculateBubbleStats(top8Bubbles),
-            });
-
-
-            // 3. Process Record Analysis from all results
-            const processedResults = {};
-            const targetRecords = [`${rounds}-0`, `${rounds - 1}-0-1`, `${rounds - 1}-1`, `${rounds - 2}-1-1`, `${rounds - 2}-2`];
-
-            targetRecords.forEach(record => {
-                const recordAndBetterCounts = allSimResults.map(tournamentResult => {
-                    return tournamentResult.filter(p => {
-                        const playerRecord = getRecordString(p);
-                        const targetRecord = isTargetRecord(playerRecord);
-                        return targetRecord && compareRecords(targetRecord, record) <= 0;
-                    }).length;
-                });
-
-                const distribution = {};
-                recordAndBetterCounts.forEach(count => {
-                    if (count > 0) { // Only show distributions for non-zero counts
-                        distribution[count] = (distribution[count] || 0) + 1;
-                    }
-                });
-
-                if (Object.keys(distribution).length > 0) {
-                    const percentages = {};
-                    Object.keys(distribution).forEach(count => {
-                        percentages[count] = (distribution[count] / simulations * 100).toFixed(1);
-                    });
-                    processedResults[record] = {
-                        recordAndBetterDistribution: percentages
-                    };
-                }
-            });
-
-
+            const { bubbleStats, processedResults } = processSimulationResults(standardSimResults, simulations, rounds);
+            setBubbleStats(bubbleStats);
             setResults(processedResults);
+
+
+            if (allowID) {
+                const idSimResults = [];
+                for (let i = 0; i < simulations; i++) {
+                    idSimResults.push(runTournament(players, rounds, drawChance, true));
+                }
+                const { bubbleStats: bubbleStatsID, processedResults: processedResultsID } = processSimulationResults(idSimResults, simulations, rounds);
+                setBubbleStatsWithID(bubbleStatsID);
+                setResultsWithID(processedResultsID);
+            }
+
+
             setIsRunning(false);
         }, 100);
     };
@@ -315,99 +372,15 @@ const SwissTournamentSimulator = () => {
     const maxPossiblePoints = rounds * 3;
     const expectedPoints = rounds * (3 * 0.5 * (1 - drawChance / 100) + 1 * (drawChance / 100));
 
-    return (
-        <div className="p-6 max-w-6xl mx-auto bg-white">
-            <h1 className="text-3xl font-bold mb-6 text-center text-gray-800">
-                Swiss Magic Tournament Simulator
-            </h1>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                <div className="bg-gray-50 p-4 rounded-lg">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Number of Players
-                    </label>
-                    <input
-                        type="number"
-                        value={players}
-                        onChange={(e) => setPlayers(Math.max(2, parseInt(e.target.value) || 2))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        min="2"
-                        max="1000"
-                    />
-                </div>
-
-                <div className="bg-gray-50 p-4 rounded-lg">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Number of Rounds
-                    </label>
-                    <input
-                        type="number"
-                        value={rounds}
-                        onChange={(e) => setRounds(Math.max(1, parseInt(e.target.value) || 1))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        min="1"
-                        max="20"
-                    />
-                </div>
-
-                <div className="bg-gray-50 p-4 rounded-lg">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Draw Chance (%)
-                    </label>
-                    <input
-                        type="number"
-                        value={drawChance}
-                        onChange={(e) => setDrawChance(Math.max(0, Math.min(100, parseInt(e.target.value) || 0)))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        min="0"
-                        max="100"
-                    />
-                </div>
-
-                <div className="bg-gray-50 p-4 rounded-lg">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Simulations
-                    </label>
-                    <input
-                        type="number"
-                        value={simulations}
-                        onChange={(e) => setSimulations(Math.max(100, parseInt(e.target.value) || 100))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        min="100"
-                        max="10000"
-                    />
-                </div>
-            </div>
-
-            <div className="mb-6 p-4 bg-blue-50 rounded-lg">
-                <h3 className="text-lg font-semibold mb-2">Tournament Info</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                    <div className="space-y-1">
-                        <div>Max Points: <span className="font-bold">{maxPossiblePoints}</span></div>
-                        <div>Expected Points: <span className="font-bold">{expectedPoints.toFixed(2)}</span></div>
-                    </div>
-                    <div className="space-y-1">
-                        <div>Win = 3pts, Draw = 1pt, Loss = 0pts</div>
-                        <div>Ranking: Points → Opponent Win% → Player ID</div>
-                    </div>
-                </div>
-            </div>
-
-            <button
-                onClick={runSimulations}
-                disabled={isRunning}
-                className="w-full bg-blue-600 text-white py-3 px-6 rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed mb-6"
-            >
-                {isRunning ? 'Running Simulation...' : 'Run Simulation'}
-            </button>
-
+    const ResultsDisplay = ({ bubbleStats, results, compareRecords }) => (
+        <>
             {bubbleStats && (
                 <div className="bg-white p-6 rounded-lg border mb-6">
                     <h3 className="text-2xl font-bold mb-4 text-purple-600">Bubble Analysis</h3>
                     <p className="text-sm text-gray-600 mb-6">
                         This analyzes how often players miss a top spot (like Top 4 or Top 8) due to tiebreakers, even when they have the same point total as a player who made the cut. The "bubble" is the number of players ranked just outside the cut-off with the same points.
                     </p>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="grid grid-cols-1 gap-6">
                         {/* Top 4 Bubble */}
                         <div className="bg-gray-50 p-4 rounded-lg">
                             <h4 className="text-lg font-semibold mb-3">Top 4 Bubble Analysis</h4>
@@ -480,6 +453,124 @@ const SwissTournamentSimulator = () => {
                             </div>
                         </div>
                     ))}
+                </div>
+            )}
+        </>
+    );
+
+    return (
+        <div className="p-6 max-w-6xl mx-auto bg-white">
+            <h1 className="text-3xl font-bold mb-6 text-center text-gray-800">
+                Swiss Magic Tournament Simulator
+            </h1>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                <div className="bg-gray-50 p-4 rounded-lg">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Number of Players
+                    </label>
+                    <input
+                        type="number"
+                        value={players}
+                        onChange={(e) => setPlayers(Math.max(2, parseInt(e.target.value) || 2))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        min="2"
+                        max="1000"
+                    />
+                </div>
+
+                <div className="bg-gray-50 p-4 rounded-lg">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Number of Rounds
+                    </label>
+                    <input
+                        type="number"
+                        value={rounds}
+                        onChange={(e) => setRounds(Math.max(1, parseInt(e.target.value) || 1))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        min="1"
+                        max="20"
+                    />
+                </div>
+
+                <div className="bg-gray-50 p-4 rounded-lg">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Draw Chance (%)
+                    </label>
+                    <input
+                        type="number"
+                        value={drawChance}
+                        onChange={(e) => setDrawChance(Math.max(0, Math.min(100, parseInt(e.target.value) || 0)))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        min="0"
+                        max="100"
+                    />
+                </div>
+
+                <div className="bg-gray-50 p-4 rounded-lg">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Simulations
+                    </label>
+                    <input
+                        type="number"
+                        value={simulations}
+                        onChange={(e) => setSimulations(Math.max(100, parseInt(e.target.value) || 100))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        min="100"
+                        max="10000"
+                    />
+                </div>
+            </div>
+
+            <div className="mb-6 flex justify-center items-center">
+                <div className="flex items-center">
+                    <input
+                        id="allow-id-checkbox"
+                        type="checkbox"
+                        checked={allowID}
+                        onChange={(e) => setAllowID(e.target.checked)}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    />
+                    <label htmlFor="allow-id-checkbox" className="ml-2 block text-sm text-gray-900">
+                        Allow Intentional Draws (if both players lock Top 8)
+                    </label>
+                </div>
+            </div>
+
+            <div className="mb-6 p-4 bg-blue-50 rounded-lg">
+                <h3 className="text-lg font-semibold mb-2">Tournament Info</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div className="space-y-1">
+                        <div>Max Points: <span className="font-bold">{maxPossiblePoints}</span></div>
+                        <div>Expected Points: <span className="font-bold">{expectedPoints.toFixed(2)}</span></div>
+                    </div>
+                    <div className="space-y-1">
+                        <div>Win = 3pts, Draw = 1pt, Loss = 0pts</div>
+                        <div>Ranking: Points → Opponent Win% → Player ID</div>
+                    </div>
+                </div>
+            </div>
+
+            <button
+                onClick={runSimulations}
+                disabled={isRunning}
+                className="w-full bg-blue-600 text-white py-3 px-6 rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed mb-6"
+            >
+                {isRunning ? 'Running Simulation...' : 'Run Simulation'}
+            </button>
+
+            {bubbleStats && (
+                <div className={`grid ${allowID && bubbleStatsWithID ? 'md:grid-cols-2 gap-x-12' : 'grid-cols-1'}`}>
+                    <div>
+                        {allowID && bubbleStatsWithID && <h2 className="text-2xl font-bold mb-4 text-center">Without Intentional Draws</h2>}
+                        <ResultsDisplay bubbleStats={bubbleStats} results={results} compareRecords={compareRecords} />
+                    </div>
+                    {allowID && bubbleStatsWithID && (
+                        <div>
+                            <h2 className="text-2xl font-bold mb-4 text-center">With Intentional Draws</h2>
+                            <ResultsDisplay bubbleStats={bubbleStatsWithID} results={resultsWithID} compareRecords={compareRecords} />
+                        </div>
+                    )}
                 </div>
             )}
         </div>
