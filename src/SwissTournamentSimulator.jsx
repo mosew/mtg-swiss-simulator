@@ -440,25 +440,20 @@ const SwissTournamentSimulator = () => {
                 const total = counts.reduce((sum, count) => sum + count, 0);
                 const average = total / counts.length;
 
-                const cdfPercentages = {};
+                const distributionCounts = {};
+                counts.forEach(size => {
+                    distributionCounts[size] = (distributionCounts[size] || 0) + 1;
+                });
 
-                // "No one pushed out" (PMF for 0)
-                const zeroCount = counts.filter(c => c === 0).length;
-                cdfPercentages[0] = (zeroCount / simulations * 100).toFixed(1);
-
-                // "N or more" (1 - CDF)
-                const maxCount = Math.max(0, ...counts);
-                for (let i = 1; i <= maxCount; i++) {
-                    const countAtOrAbove = counts.filter(c => c >= i).length;
-                    if (countAtOrAbove > 0) {
-                        cdfPercentages[i] = (countAtOrAbove / simulations * 100).toFixed(1);
-                    }
-                }
+                const distributionPercentages = {};
+                Object.keys(distributionCounts).forEach(size => {
+                    distributionPercentages[size] = (distributionCounts[size] / simulations * 100).toFixed(1);
+                });
 
                 return {
                     average: average.toFixed(2),
                     median: median.toFixed(2),
-                    distribution: cdfPercentages,
+                    distribution: distributionPercentages,
                 };
             };
 
@@ -640,7 +635,7 @@ const SwissTournamentSimulator = () => {
 
             {discrepancyStats && (
                 <div className="bg-white p-6 rounded-lg border-2 border-red-200 mb-6">
-                    <h2 className="text-2xl font-bold mb-4 text-red-600"># missing bracket due to intentional draws</h2>
+                    <h2 className="text-2xl font-bold mb-4 text-red-600">Number of players missing bracket due to intentional draws</h2>
                     <p className="text-sm text-gray-600 mb-4">
                         This shows how many players would have made a top cut without Intentional Draws (IDs), but were pushed out when IDs were allowed. It measures the negative impact of strategic drawing on players who play out their matches.
                     </p>
@@ -661,7 +656,7 @@ const SwissTournamentSimulator = () => {
                                             <span>{
                                                 count === '0'
                                                     ? 'No one pushed out'
-                                                    : `${count} or more player${parseInt(count) === 1 ? '' : 's'}`
+                                                    : `${count} player${parseInt(count) === 1 ? '' : 's'}`
                                             }:</span>
                                             <span className="font-bold">{percentage}% of sims</span>
                                         </div>
@@ -684,7 +679,7 @@ const SwissTournamentSimulator = () => {
                                             <span>{
                                                 count === '0'
                                                     ? 'No one pushed out'
-                                                    : `${count} or more player${parseInt(count) === 1 ? '' : 's'}`
+                                                    : `${count} player${parseInt(count) === 1 ? '' : 's'}`
                                             }:</span>
                                             <span className="font-bold">{percentage}% of sims</span>
                                         </div>
