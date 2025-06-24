@@ -232,16 +232,40 @@ const SwissTournamentSimulator = () => {
 
             const calculateBubbleStats = (bubbleSizes) => {
                 if (bubbleSizes.length === 0) {
-                    return { average: 0, max: 0, frequency: 0 };
+                    return {
+                        average: (0).toFixed(2),
+                        median: (0).toFixed(2),
+                        max: 0,
+                        frequency: (0).toFixed(1),
+                        distribution: {}
+                    };
                 }
+
+                const sortedSizes = [...bubbleSizes].sort((a, b) => a - b);
+                const mid = Math.floor(sortedSizes.length / 2);
+                const median = sortedSizes.length % 2 !== 0 ? sortedSizes[mid] : (sortedSizes[mid - 1] + sortedSizes[mid]) / 2;
                 const totalBubblePlayers = bubbleSizes.reduce((sum, size) => sum + size, 0);
                 const average = totalBubblePlayers / bubbleSizes.length;
-                const max = Math.max(...bubbleSizes, 0);
+                const max = sortedSizes[sortedSizes.length - 1];
                 const frequency = (bubbleSizes.filter(size => size > 0).length / bubbleSizes.length) * 100;
+
+                const distributionCounts = {};
+                bubbleSizes.forEach(size => {
+                    distributionCounts[size] = (distributionCounts[size] || 0) + 1;
+                });
+
+                const distributionPercentages = {};
+                Object.keys(distributionCounts).forEach(size => {
+                    distributionPercentages[size] = (distributionCounts[size] / simulations * 100).toFixed(1);
+                });
+
+
                 return {
                     average: average.toFixed(2),
+                    median: median.toFixed(2),
                     max,
                     frequency: frequency.toFixed(1),
+                    distribution: distributionPercentages,
                 };
             };
 
@@ -377,6 +401,59 @@ const SwissTournamentSimulator = () => {
                 {isRunning ? 'Running Simulation...' : 'Run Simulation'}
             </button>
 
+            {bubbleStats && (
+                <div className="bg-white p-6 rounded-lg border mb-6">
+                    <h3 className="text-2xl font-bold mb-4 text-purple-600">Bubble Analysis</h3>
+                    <p className="text-sm text-gray-600 mb-6">
+                        This analyzes how often players miss a top spot (like Top 4 or Top 8) due to tiebreakers, even when they have the same point total as a player who made the cut. The "bubble" is the number of players ranked just outside the cut-off with the same points.
+                    </p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {/* Top 4 Bubble */}
+                        <div className="bg-gray-50 p-4 rounded-lg">
+                            <h4 className="text-lg font-semibold mb-3">Top 4 Bubble Analysis</h4>
+                            <div className="space-y-2 text-sm mb-4">
+                                <div className="flex justify-between"><span>Average players on bubble:</span><span className="font-bold">{bubbleStats.top4.average}</span></div>
+                                <div className="flex justify-between"><span>Median players on bubble:</span><span className="font-bold">{bubbleStats.top4.median}</span></div>
+                                <div className="flex justify-between"><span>Most players on bubble (one sim):</span><span className="font-bold">{bubbleStats.top4.max}</span></div>
+                                <div className="flex justify-between"><span>Chance of a bubble occurring:</span><span className="font-bold">{bubbleStats.top4.frequency}%</span></div>
+                            </div>
+                            <h5 className="font-semibold mb-2 text-gray-800">Distribution of Bubble Sizes</h5>
+                            <div className="space-y-1 max-h-48 overflow-y-auto text-sm">
+                                {Object.entries(bubbleStats.top4.distribution)
+                                    .sort(([a], [b]) => parseInt(a) - parseInt(b))
+                                    .map(([count, percentage]) => (
+                                        <div key={count} className="flex justify-between">
+                                            <span>{count === '0' ? 'No bubble' : `${count} players`}:</span>
+                                            <span className="font-bold">{percentage}% of sims</span>
+                                        </div>
+                                    ))}
+                            </div>
+                        </div>
+                        {/* Top 8 Bubble */}
+                        <div className="bg-gray-50 p-4 rounded-lg">
+                            <h4 className="text-lg font-semibold mb-3">Top 8 Bubble Analysis</h4>
+                            <div className="space-y-2 text-sm mb-4">
+                                <div className="flex justify-between"><span>Average players on bubble:</span><span className="font-bold">{bubbleStats.top8.average}</span></div>
+                                <div className="flex justify-between"><span>Median players on bubble:</span><span className="font-bold">{bubbleStats.top8.median}</span></div>
+                                <div className="flex justify-between"><span>Most players on bubble (one sim):</span><span className="font-bold">{bubbleStats.top8.max}</span></div>
+                                <div className="flex justify-between"><span>Chance of a bubble occurring:</span><span className="font-bold">{bubbleStats.top8.frequency}%</span></div>
+                            </div>
+                            <h5 className="font-semibold mb-2 text-gray-800">Distribution of Bubble Sizes</h5>
+                            <div className="space-y-1 max-h-48 overflow-y-auto text-sm">
+                                {Object.entries(bubbleStats.top8.distribution)
+                                    .sort(([a], [b]) => parseInt(a) - parseInt(b))
+                                    .map(([count, percentage]) => (
+                                        <div key={count} className="flex justify-between">
+                                            <span>{count === '0' ? 'No bubble' : `${count} players`}:</span>
+                                            <span className="font-bold">{percentage}% of sims</span>
+                                        </div>
+                                    ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {results && (
                 <div className="space-y-6">
                     {Object.keys(results).length === 0 && (
@@ -403,32 +480,6 @@ const SwissTournamentSimulator = () => {
                             </div>
                         </div>
                     ))}
-                </div>
-            )}
-            {bubbleStats && (
-                <div className="bg-white p-6 rounded-lg border mt-6">
-                    <h3 className="text-2xl font-bold mb-4 text-purple-600">Bubble Analysis</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="bg-gray-50 p-4 rounded-lg">
-                            <h4 className="text-lg font-semibold mb-3">Top 4 Bubble</h4>
-                            <div className="space-y-2 text-sm">
-                                <div className="flex justify-between"><span>Avg players on bubble:</span><span className="font-bold">{bubbleStats.top4.average}</span></div>
-                                <div className="flex justify-between"><span>Max players on bubble:</span><span className="font-bold">{bubbleStats.top4.max}</span></div>
-                                <div className="flex justify-between"><span>Bubble Frequency:</span><span className="font-bold">{bubbleStats.top4.frequency}%</span></div>
-                            </div>
-                        </div>
-                        <div className="bg-gray-50 p-4 rounded-lg">
-                            <h4 className="text-lg font-semibold mb-3">Top 8 Bubble</h4>
-                            <div className="space-y-2 text-sm">
-                                <div className="flex justify-between"><span>Avg players on bubble:</span><span className="font-bold">{bubbleStats.top8.average}</span></div>
-                                <div className="flex justify-between"><span>Max players on bubble:</span><span className="font-bold">{bubbleStats.top8.max}</span></div>
-                                <div className="flex justify-between"><span>Bubble Frequency:</span><span className="font-bold">{bubbleStats.top8.frequency}%</span></div>
-                            </div>
-                        </div>
-                    </div>
-                    <p className="text-xs text-gray-500 mt-4">
-                        The "bubble" refers to players who have the same match record as the last qualifying spot (4th or 8th place) but miss the cut due to tiebreakers.
-                    </p>
                 </div>
             )}
         </div>
