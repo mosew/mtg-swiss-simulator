@@ -378,7 +378,6 @@ const SwissTournamentSimulator = () => {
     };
 
     const maxPossiblePoints = rounds * 3;
-    const expectedPoints = rounds * (3 * 0.5 * (1 - drawChance / 100) + 1 * (drawChance / 100));
 
     const ResultsDisplay = ({ bubbleStats, results, compareRecords }) => (
         <>
@@ -497,7 +496,7 @@ const SwissTournamentSimulator = () => {
 
                 <div className="bg-gray-50 p-4 rounded-lg">
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Draw Chance (%)
+                        Unintentional Draw Chance (%)
                     </label>
                     <input
                         type="number"
@@ -529,11 +528,9 @@ const SwissTournamentSimulator = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                     <div className="space-y-1">
                         <div>Max Points: <span className="font-bold">{maxPossiblePoints}</span></div>
-                        <div>Expected Points: <span className="font-bold">{expectedPoints.toFixed(2)}</span></div>
                     </div>
                     <div className="space-y-1">
                         <div>Win = 3pts, Draw = 1pt, Loss = 0pts</div>
-                        <div>Ranking: Points → Opponent Win% → Player ID</div>
                     </div>
                 </div>
             </div>
