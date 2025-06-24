@@ -6,6 +6,7 @@ const SwissTournamentSimulator = () => {
     const [drawChance, setDrawChance] = useState(5);
     const [simulations, setSimulations] = useState(1000);
     const [results, setResults] = useState(null);
+    const [bubbleStats, setBubbleStats] = useState(null);
     const [isRunning, setIsRunning] = useState(false);
 
     // Swiss tournament pairing function
@@ -180,105 +181,107 @@ const SwissTournamentSimulator = () => {
     // Run multiple simulations
     const runSimulations = () => {
         setIsRunning(true);
+        setResults(null);
+        setBubbleStats(null);
 
         // Use setTimeout to allow UI to update
         setTimeout(() => {
-            const recordData = {};
+            // --- Refactored Simulation Logic ---
 
-            for (let sim = 0; sim < simulations; sim++) {
-                const tournamentResult = runTournament(players, rounds, drawChance);
-
-                // Count players by record
-                const recordCounts = {};
-                tournamentResult.forEach(player => {
-                    const record = getRecordString(player);
-                    const targetRecord = isTargetRecord(record);
-                    if (targetRecord) {
-                        recordCounts[targetRecord] = (recordCounts[targetRecord] || 0) + 1;
-                    }
-                });
-
-                // Store the counts for this simulation
-                Object.keys(recordCounts).forEach(record => {
-                    if (!recordData[record]) {
-                        recordData[record] = [];
-                    }
-                    recordData[record].push(recordCounts[record]);
-                });
-
-                // Also store 0 counts for records that didn't appear
-                const targetRecords = [`${rounds}-0`, `${rounds - 1}-0-1`, `${rounds - 1}-1`, `${rounds - 2}-1-1`, `${rounds - 2}-2`];
-                targetRecords.forEach(record => {
-                    if (!recordCounts[record]) {
-                        if (!recordData[record]) {
-                            recordData[record] = [];
-                        }
-                        recordData[record].push(0);
-                    }
-                });
+            // 1. Run all simulations first and store the results
+            const allSimResults = [];
+            for (let i = 0; i < simulations; i++) {
+                allSimResults.push(runTournament(players, rounds, drawChance));
             }
 
-            // Calculate statistics for each record
-            const processedResults = {};
+            // 2. Process Bubble Analysis from all results
+            const top4Bubbles = [];
+            const top8Bubbles = [];
 
-            Object.keys(recordData).forEach(record => {
-                const counts = recordData[record];
-
-                // Distribution of players at this exact record
-                const distribution = {};
-                counts.forEach(count => {
-                    distribution[count] = (distribution[count] || 0) + 1;
-                });
-
-                // Convert to percentages
-                const distributionPercentages = {};
-                Object.keys(distribution).forEach(count => {
-                    distributionPercentages[count] = (distribution[count] / simulations * 100).toFixed(1);
-                });
-
-                // Calculate "this record and better" statistics
-                const recordAndBetterCounts = [];
-                for (let sim = 0; sim < simulations; sim++) {
-                    let totalAtThisRecordAndBetter = 0;
-
-                    // Get all records from this simulation and count those at this record or better
-                    const allRecordsThisSim = {};
-                    const tournamentResult = runTournament(players, rounds, drawChance);
-
-                    tournamentResult.forEach(player => {
-                        const playerRecord = getRecordString(player);
-                        const targetRecord = isTargetRecord(playerRecord);
-                        if (targetRecord) {
-                            allRecordsThisSim[targetRecord] = (allRecordsThisSim[targetRecord] || 0) + 1;
+            allSimResults.forEach(tournamentResult => {
+                if (tournamentResult.length >= 4) {
+                    const fourthPlacePoints = tournamentResult[3].points;
+                    let top4Bubble = 0;
+                    for (let i = 4; i < tournamentResult.length; i++) {
+                        if (tournamentResult[i].points === fourthPlacePoints) {
+                            top4Bubble++;
+                        } else {
+                            break; // Players are sorted by points
                         }
-                    });
-
-                    // Count players at this record or better
-                    Object.keys(allRecordsThisSim).forEach(otherRecord => {
-                        if (compareRecords(otherRecord, record) <= 0) { // otherRecord is same or better
-                            totalAtThisRecordAndBetter += allRecordsThisSim[otherRecord];
-                        }
-                    });
-
-                    recordAndBetterCounts.push(totalAtThisRecordAndBetter);
+                    }
+                    top4Bubbles.push(top4Bubble);
+                } else {
+                    top4Bubbles.push(0);
                 }
 
-                // Distribution of players at this record and better
-                const recordAndBetterDistribution = {};
-                recordAndBetterCounts.forEach(count => {
-                    recordAndBetterDistribution[count] = (recordAndBetterDistribution[count] || 0) + 1;
-                });
-
-                const recordAndBetterPercentages = {};
-                Object.keys(recordAndBetterDistribution).forEach(count => {
-                    recordAndBetterPercentages[count] = (recordAndBetterDistribution[count] / simulations * 100).toFixed(1);
-                });
-
-                processedResults[record] = {
-                    exactDistribution: distributionPercentages,
-                    recordAndBetterDistribution: recordAndBetterPercentages
-                };
+                if (tournamentResult.length >= 8) {
+                    const eighthPlacePoints = tournamentResult[7].points;
+                    let top8Bubble = 0;
+                    for (let i = 8; i < tournamentResult.length; i++) {
+                        if (tournamentResult[i].points === eighthPlacePoints) {
+                            top8Bubble++;
+                        } else {
+                            break;
+                        }
+                    }
+                    top8Bubbles.push(top8Bubble);
+                } else {
+                    top8Bubbles.push(0);
+                }
             });
+
+            const calculateBubbleStats = (bubbleSizes) => {
+                if (bubbleSizes.length === 0) {
+                    return { average: 0, max: 0, frequency: 0 };
+                }
+                const totalBubblePlayers = bubbleSizes.reduce((sum, size) => sum + size, 0);
+                const average = totalBubblePlayers / bubbleSizes.length;
+                const max = Math.max(...bubbleSizes, 0);
+                const frequency = (bubbleSizes.filter(size => size > 0).length / bubbleSizes.length) * 100;
+                return {
+                    average: average.toFixed(2),
+                    max,
+                    frequency: frequency.toFixed(1),
+                };
+            };
+
+            setBubbleStats({
+                top4: calculateBubbleStats(top4Bubbles),
+                top8: calculateBubbleStats(top8Bubbles),
+            });
+
+
+            // 3. Process Record Analysis from all results
+            const processedResults = {};
+            const targetRecords = [`${rounds}-0`, `${rounds - 1}-0-1`, `${rounds - 1}-1`, `${rounds - 2}-1-1`, `${rounds - 2}-2`];
+
+            targetRecords.forEach(record => {
+                const recordAndBetterCounts = allSimResults.map(tournamentResult => {
+                    return tournamentResult.filter(p => {
+                        const playerRecord = getRecordString(p);
+                        const targetRecord = isTargetRecord(playerRecord);
+                        return targetRecord && compareRecords(targetRecord, record) <= 0;
+                    }).length;
+                });
+
+                const distribution = {};
+                recordAndBetterCounts.forEach(count => {
+                    if (count > 0) { // Only show distributions for non-zero counts
+                        distribution[count] = (distribution[count] || 0) + 1;
+                    }
+                });
+
+                if (Object.keys(distribution).length > 0) {
+                    const percentages = {};
+                    Object.keys(distribution).forEach(count => {
+                        percentages[count] = (distribution[count] / simulations * 100).toFixed(1);
+                    });
+                    processedResults[record] = {
+                        recordAndBetterDistribution: percentages
+                    };
+                }
+            });
+
 
             setResults(processedResults);
             setIsRunning(false);
@@ -376,41 +379,56 @@ const SwissTournamentSimulator = () => {
 
             {results && (
                 <div className="space-y-6">
+                    {Object.keys(results).length === 0 && (
+                        <div className="text-center text-gray-500 py-8">
+                            No players achieved the target records in any simulation. Try increasing the player count or simulations.
+                        </div>
+                    )}
                     {Object.keys(results).sort(compareRecords).map(record => (
                         <div key={record} className="bg-white p-6 rounded-lg border">
                             <h3 className="text-2xl font-bold mb-4 text-blue-600">{record} Record</h3>
 
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                                <div className="bg-gray-50 p-4 rounded-lg">
-                                    <h4 className="text-lg font-semibold mb-3">Players at Exactly {record}</h4>
-                                    <div className="space-y-2 max-h-64 overflow-y-auto">
-                                        {Object.entries(results[record].exactDistribution)
-                                            .sort(([a], [b]) => parseInt(a) - parseInt(b))
-                                            .map(([count, percentage]) => (
-                                                <div key={count} className="flex justify-between text-sm">
-                                                    <span>{count} players:</span>
-                                                    <span className="font-bold">{percentage}%</span>
-                                                </div>
-                                            ))}
-                                    </div>
-                                </div>
-
-                                <div className="bg-gray-50 p-4 rounded-lg">
-                                    <h4 className="text-lg font-semibold mb-3">Players at {record} or Better</h4>
-                                    <div className="space-y-2 max-h-64 overflow-y-auto">
-                                        {Object.entries(results[record].recordAndBetterDistribution)
-                                            .sort(([a], [b]) => parseInt(a) - parseInt(b))
-                                            .map(([count, percentage]) => (
-                                                <div key={count} className="flex justify-between text-sm">
-                                                    <span>{count} players:</span>
-                                                    <span className="font-bold">{percentage}%</span>
-                                                </div>
-                                            ))}
-                                    </div>
+                            <div className="bg-gray-50 p-4 rounded-lg">
+                                <h4 className="text-lg font-semibold mb-3">Players at {record} or Better</h4>
+                                <div className="space-y-2 max-h-64 overflow-y-auto">
+                                    {Object.entries(results[record].recordAndBetterDistribution)
+                                        .sort(([a], [b]) => parseInt(a) - parseInt(b))
+                                        .map(([count, percentage]) => (
+                                            <div key={count} className="flex justify-between text-sm">
+                                                <span>{count} players:</span>
+                                                <span className="font-bold">{percentage}%</span>
+                                            </div>
+                                        ))}
                                 </div>
                             </div>
                         </div>
                     ))}
+                </div>
+            )}
+            {bubbleStats && (
+                <div className="bg-white p-6 rounded-lg border mt-6">
+                    <h3 className="text-2xl font-bold mb-4 text-purple-600">Bubble Analysis</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="bg-gray-50 p-4 rounded-lg">
+                            <h4 className="text-lg font-semibold mb-3">Top 4 Bubble</h4>
+                            <div className="space-y-2 text-sm">
+                                <div className="flex justify-between"><span>Avg players on bubble:</span><span className="font-bold">{bubbleStats.top4.average}</span></div>
+                                <div className="flex justify-between"><span>Max players on bubble:</span><span className="font-bold">{bubbleStats.top4.max}</span></div>
+                                <div className="flex justify-between"><span>Bubble Frequency:</span><span className="font-bold">{bubbleStats.top4.frequency}%</span></div>
+                            </div>
+                        </div>
+                        <div className="bg-gray-50 p-4 rounded-lg">
+                            <h4 className="text-lg font-semibold mb-3">Top 8 Bubble</h4>
+                            <div className="space-y-2 text-sm">
+                                <div className="flex justify-between"><span>Avg players on bubble:</span><span className="font-bold">{bubbleStats.top8.average}</span></div>
+                                <div className="flex justify-between"><span>Max players on bubble:</span><span className="font-bold">{bubbleStats.top8.max}</span></div>
+                                <div className="flex justify-between"><span>Bubble Frequency:</span><span className="font-bold">{bubbleStats.top8.frequency}%</span></div>
+                            </div>
+                        </div>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-4">
+                        The "bubble" refers to players who have the same match record as the last qualifying spot (4th or 8th place) but miss the cut due to tiebreakers.
+                    </p>
                 </div>
             )}
         </div>
