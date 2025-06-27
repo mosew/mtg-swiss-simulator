@@ -40,6 +40,18 @@ const SwissTournamentSimulator = () => {
     const [discrepancyStats, setDiscrepancyStats] = useState(null);
     const [isRunning, setIsRunning] = useState(false);
 
+    const formatPercentageAsOneIn = (percentageStr) => {
+        const percentage = parseFloat(percentageStr);
+        if (isNaN(percentage) || percentage <= 0.05) { // Treat very small numbers as "never"
+            return `Never (${percentageStr || '0.0'}%)`;
+        }
+        if (percentage >= 99.95) { // Close enough to 100 to call it always
+            return `Always (${percentageStr}%)`;
+        }
+        const oneIn = Math.round(100 / percentage);
+        return `~1 in ${oneIn} tournaments (${percentageStr}%)`;
+    };
+
     // Swiss tournament pairing function
     const pairPlayers = (playerScores) => {
         // Sort players by score (descending), then by ID for consistency
@@ -328,6 +340,18 @@ const SwissTournamentSimulator = () => {
 
     // Run multiple simulations
     const runSimulations = () => {
+        // Validate and clamp input values before running
+        const clampedPlayers = Math.max(2, Math.min(10000, parseInt(players, 10) || 2));
+        const clampedRounds = Math.max(1, Math.min(20, parseInt(rounds, 10) || 1));
+        const clampedDrawChance = Math.max(0, Math.min(100, parseInt(drawChance, 10) || 0));
+        const clampedSimulations = Math.max(100, Math.min(10000, parseInt(simulations, 10) || 100));
+
+        // Update state to reflect clamped values in the UI, ensuring consistency
+        setPlayers(clampedPlayers);
+        setRounds(clampedRounds);
+        setDrawChance(clampedDrawChance);
+        setSimulations(clampedSimulations);
+
         setIsRunning(true);
         setResults(null);
         setBubbleStats(null);
@@ -344,14 +368,14 @@ const SwissTournamentSimulator = () => {
             const finalId4Results = [];
             const finalId8Results = [];
 
-            for (let i = 0; i < simulations; i++) {
+            for (let i = 0; i < clampedSimulations; i++) {
                 // Initialize three identical states for this single simulation run
-                let players_standard = Array.from({ length: players }, (_, j) => ({ id: j, points: 0, wins: 0, losses: 0, draws: 0, opponents: [], opponentWinPercentage: 0 }));
+                let players_standard = Array.from({ length: clampedPlayers }, (_, j) => ({ id: j, points: 0, wins: 0, losses: 0, draws: 0, opponents: [], opponentWinPercentage: 0 }));
                 let players_id4 = JSON.parse(JSON.stringify(players_standard));
                 let players_id8 = JSON.parse(JSON.stringify(players_standard));
 
                 // Round-by-round simulation for all three states in lockstep
-                for (let round = 1; round <= rounds; round++) {
+                for (let round = 1; round <= clampedRounds; round++) {
                     // Pairings can diverge, so calculate them for each state
                     const pairs_standard = pairPlayers(players_standard);
                     const pairs_id4 = pairPlayers(players_id4);
@@ -373,9 +397,9 @@ const SwissTournamentSimulator = () => {
                     // Now, process the rounds for each state using the same outcome function.
                     // The first time a pair is seen, its outcome is generated and stored.
                     // Subsequent requests for the same pair get the stored outcome.
-                    processRound(players_standard, pairs_standard, drawChance, false, 0, round, rounds, getMatchOutcome);
-                    processRound(players_id4, pairs_id4, drawChance, true, 4, round, rounds, getMatchOutcome);
-                    processRound(players_id8, pairs_id8, drawChance, true, 8, round, rounds, getMatchOutcome);
+                    processRound(players_standard, pairs_standard, clampedDrawChance, false, 0, round, clampedRounds, getMatchOutcome);
+                    processRound(players_id4, pairs_id4, clampedDrawChance, true, 4, round, clampedRounds, getMatchOutcome);
+                    processRound(players_id8, pairs_id8, clampedDrawChance, true, 8, round, clampedRounds, getMatchOutcome);
                 }
 
                 // After all rounds, rank the players for each state
@@ -389,7 +413,7 @@ const SwissTournamentSimulator = () => {
             const top4DiscrepancyCounts = [];
             const top8DiscrepancyCounts = [];
 
-            for (let i = 0; i < simulations; i++) {
+            for (let i = 0; i < clampedSimulations; i++) {
                 const standardResult = finalStandardResults[i];
                 const id4Result = finalId4Results[i];
                 const id8Result = finalId8Results[i];
@@ -417,15 +441,15 @@ const SwissTournamentSimulator = () => {
 
 
             // --- Process Results ---
-            const { bubbleStats, processedResults } = processSimulationResults(finalStandardResults, simulations, rounds);
+            const { bubbleStats, processedResults } = processSimulationResults(finalStandardResults, clampedSimulations, clampedRounds);
             setBubbleStats(bubbleStats);
             setResults(processedResults);
 
-            const { bubbleStats: bubbleStatsID4, processedResults: processedResultsID4 } = processSimulationResults(finalId4Results, simulations, rounds);
+            const { bubbleStats: bubbleStatsID4, processedResults: processedResultsID4 } = processSimulationResults(finalId4Results, clampedSimulations, clampedRounds);
             setBubbleStatsID4(bubbleStatsID4);
             setResultsID4(processedResultsID4);
 
-            const { bubbleStats: bubbleStatsID8, processedResults: processedResultsID8 } = processSimulationResults(finalId8Results, simulations, rounds);
+            const { bubbleStats: bubbleStatsID8, processedResults: processedResultsID8 } = processSimulationResults(finalId8Results, clampedSimulations, clampedRounds);
             setBubbleStatsID8(bubbleStatsID8);
             setResultsID8(processedResultsID8);
 
@@ -447,7 +471,7 @@ const SwissTournamentSimulator = () => {
 
                 const distributionPercentages = {};
                 Object.keys(distributionCounts).forEach(size => {
-                    distributionPercentages[size] = (distributionCounts[size] / simulations * 100).toFixed(1);
+                    distributionPercentages[size] = (distributionCounts[size] / clampedSimulations * 100).toFixed(1);
                 });
 
                 return {
@@ -467,83 +491,92 @@ const SwissTournamentSimulator = () => {
         }, 100);
     };
 
-    const maxPossiblePoints = rounds * 3;
+    const maxPossiblePoints = (parseInt(rounds, 10) || 0) * 3;
 
     const ResultsDisplay = ({ bubbleStats, results, compareRecords }) => (
         <>
             {bubbleStats && (
                 <div className="bg-white p-6 rounded-lg border mb-6">
-                    <div className="grid grid-cols-1 gap-6">
-                        {/* Top 4 Bubble */}
-                        <div className="bg-gray-50 p-4 rounded-lg">
-                            <h4 className="text-lg font-semibold mb-3">Top 4 Bubble Analysis</h4>
-                            <div className="space-y-2 text-sm mb-4">
-                                <div className="flex justify-between"><span>Average players on bubble:</span><span className="font-bold">{bubbleStats.top4.average}</span></div>
-                                <div className="flex justify-between"><span>Median players on bubble:</span><span className="font-bold">{bubbleStats.top4.median}</span></div>
-                                <div className="flex justify-between"><span>Chance of a bubble occurring:</span><span className="font-bold">{bubbleStats.top4.frequency}%</span></div>
-                            </div>
-                            <h5 className="font-semibold mb-2 text-gray-800">Distribution of Bubble Sizes</h5>
-                            <div className="space-y-1 max-h-48 overflow-y-auto text-sm">
-                                {Object.entries(bubbleStats.top4.distribution)
-                                    .sort(([a], [b]) => parseInt(a) - parseInt(b))
-                                    .map(([count, percentage]) => (
-                                        <div key={count} className="flex justify-between">
-                                            <span>{count === '0' ? 'No bubble' : `${count} players`}:</span>
-                                            <span className="font-bold">{percentage}% of sims</span>
-                                        </div>
-                                    ))}
-                            </div>
-                        </div>
-                        {/* Top 8 Bubble */}
-                        <div className="bg-gray-50 p-4 rounded-lg">
-                            <h4 className="text-lg font-semibold mb-3">Top 8 Bubble Analysis</h4>
-                            <div className="space-y-2 text-sm mb-4">
-                                <div className="flex justify-between"><span>Average players on bubble:</span><span className="font-bold">{bubbleStats.top8.average}</span></div>
-                                <div className="flex justify-between"><span>Median players on bubble:</span><span className="font-bold">{bubbleStats.top8.median}</span></div>
-                                <div className="flex justify-between"><span>Chance of a bubble occurring:</span><span className="font-bold">{bubbleStats.top8.frequency}%</span></div>
-                            </div>
-                            <h5 className="font-semibold mb-2 text-gray-800">Distribution of Bubble Sizes</h5>
-                            <div className="space-y-1 max-h-48 overflow-y-auto text-sm">
-                                {Object.entries(bubbleStats.top8.distribution)
-                                    .sort(([a], [b]) => parseInt(a) - parseInt(b))
-                                    .map(([count, percentage]) => (
-                                        <div key={count} className="flex justify-between">
-                                            <span>{count === '0' ? 'No bubble' : `${count} players`}:</span>
-                                            <span className="font-bold">{percentage}% of sims</span>
-                                        </div>
-                                    ))}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {results && (
-                <div className="space-y-6">
-                    {Object.keys(results).length === 0 && (
-                        <div className="text-center text-gray-500 py-8">
-                            No players achieved the target records in any simulation. Try increasing the player count or simulations.
-                        </div>
-                    )}
-                    {Object.keys(results).sort(compareRecords).map(record => (
-                        <div key={record} className="bg-white p-6 rounded-lg border">
-                            <h3 className="text-2xl font-bold mb-4 text-blue-600">{record} Record</h3>
-
+                    <details>
+                        <summary className="text-xl font-bold text-purple-600 cursor-pointer">Bubble Analysis</summary>
+                        <p className="text-sm text-gray-600 mt-2 mb-4">
+                            This analyzes how often players miss a top spot (like Top 4 or Top 8) due to tiebreakers, even when they have the same point total as a player who made the cut. The "bubble" is the number of players ranked just outside the cut-off with the same points.
+                        </p>
+                        <div className="grid grid-cols-1 gap-6 mt-4">
+                            {/* Top 4 Bubble */}
                             <div className="bg-gray-50 p-4 rounded-lg">
-                                <h4 className="text-lg font-semibold mb-3">Players at {record} or Better</h4>
-                                <div className="space-y-2 max-h-64 overflow-y-auto">
-                                    {Object.entries(results[record].recordAndBetterDistribution)
+                                <h4 className="text-lg font-semibold mb-3">Top 4 Bubble Analysis</h4>
+                                <div className="space-y-2 text-sm mb-4">
+                                    <div className="flex justify-between"><span>Average players on bubble:</span><span className="font-bold">{bubbleStats.top4.average}</span></div>
+                                    <div className="flex justify-between"><span>Median players on bubble:</span><span className="font-bold">{bubbleStats.top4.median}</span></div>
+                                    <div className="flex justify-between"><span>Chance of a bubble occurring:</span><span className="font-bold">{bubbleStats.top4.frequency}%</span></div>
+                                </div>
+                                <h5 className="font-semibold mb-2 text-gray-800">Distribution of Bubble Sizes</h5>
+                                <div className="space-y-1 max-h-48 overflow-y-auto text-sm">
+                                    {Object.entries(bubbleStats.top4.distribution)
                                         .sort(([a], [b]) => parseInt(a) - parseInt(b))
                                         .map(([count, percentage]) => (
-                                            <div key={count} className="flex justify-between text-sm">
-                                                <span>{count} players:</span>
+                                            <div key={count} className="flex justify-between">
+                                                <span>{count === '0' ? 'No bubble' : `${count} players`}:</span>
+                                                <span className="font-bold">{percentage}% of sims</span>
+                                            </div>
+                                        ))}
+                                </div>
+                            </div>
+                            {/* Top 8 Bubble */}
+                            <div className="bg-gray-50 p-4 rounded-lg">
+                                <h4 className="text-lg font-semibold mb-3">Top 8 Bubble Analysis</h4>
+                                <div className="space-y-2 text-sm mb-4">
+                                    <div className="flex justify-between"><span>Average players on bubble:</span><span className="font-bold">{bubbleStats.top8.average}</span></div>
+                                    <div className="flex justify-between"><span>Median players on bubble:</span><span className="font-bold">{bubbleStats.top8.median}</span></div>
+                                    <div className="flex justify-between"><span>Chance of a bubble occurring:</span><span className="font-bold">{bubbleStats.top8.frequency}%</span></div>
+                                </div>
+                                <h5 className="font-semibold mb-2 text-gray-800">Distribution of Bubble Sizes</h5>
+                                <div className="space-y-1 max-h-48 overflow-y-auto text-sm">
+                                    {Object.entries(bubbleStats.top8.distribution)
+                                        .sort(([a], [b]) => parseInt(a) - parseInt(b))
+                                        .map(([count, percentage]) => (
+                                            <div key={count} className="flex justify-between">
+                                                <span>{count === '0' ? 'No bubble' : `${count} players`}:</span>
                                                 <span className="font-bold">{percentage}% of sims</span>
                                             </div>
                                         ))}
                                 </div>
                             </div>
                         </div>
-                    ))}
+                    </details>
+                </div>
+            )}
+
+            {results && (
+                <div className="space-y-6">
+                    <details>
+                        <summary className="text-xl font-bold text-blue-600 cursor-pointer">Record Analysis</summary>
+                        {Object.keys(results).length === 0 && (
+                            <div className="text-center text-gray-500 py-8">
+                                No players achieved the target records in any simulation. Try increasing the player count or simulations.
+                            </div>
+                        )}
+                        {Object.keys(results).sort(compareRecords).map(record => (
+                            <div key={record} className="bg-white p-6 rounded-lg border mt-4">
+                                <h3 className="text-2xl font-bold mb-4 text-blue-600">{record} Record</h3>
+
+                                <div className="bg-gray-50 p-4 rounded-lg">
+                                    <h4 className="text-lg font-semibold mb-3">Players at {record} or Better</h4>
+                                    <div className="space-y-2 max-h-64 overflow-y-auto">
+                                        {Object.entries(results[record].recordAndBetterDistribution)
+                                            .sort(([a], [b]) => parseInt(a) - parseInt(b))
+                                            .map(([count, percentage]) => (
+                                                <div key={count} className="flex justify-between text-sm">
+                                                    <span>{count} players:</span>
+                                                    <span className="font-bold">{percentage}% of sims</span>
+                                                </div>
+                                            ))}
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </details>
                 </div>
             )}
         </>
@@ -563,7 +596,7 @@ const SwissTournamentSimulator = () => {
                     <input
                         type="number"
                         value={players}
-                        onChange={(e) => setPlayers(Math.max(2, parseInt(e.target.value) || 2))}
+                        onChange={(e) => setPlayers(e.target.value)}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                         min="2"
                         max="10000"
@@ -577,7 +610,7 @@ const SwissTournamentSimulator = () => {
                     <input
                         type="number"
                         value={rounds}
-                        onChange={(e) => setRounds(Math.max(1, parseInt(e.target.value) || 1))}
+                        onChange={(e) => setRounds(e.target.value)}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                         min="1"
                         max="20"
@@ -591,7 +624,7 @@ const SwissTournamentSimulator = () => {
                     <input
                         type="number"
                         value={drawChance}
-                        onChange={(e) => setDrawChance(Math.max(0, Math.min(100, parseInt(e.target.value) || 0)))}
+                        onChange={(e) => setDrawChance(e.target.value)}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                         min="0"
                         max="100"
@@ -605,7 +638,7 @@ const SwissTournamentSimulator = () => {
                     <input
                         type="number"
                         value={simulations}
-                        onChange={(e) => setSimulations(Math.max(100, parseInt(e.target.value) || 100))}
+                        onChange={(e) => setSimulations(e.target.value)}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                         min="100"
                         max="10000"
@@ -635,73 +668,169 @@ const SwissTournamentSimulator = () => {
 
             {discrepancyStats && (
                 <div className="bg-white p-6 rounded-lg border-2 border-red-200 mb-6">
-                    <h2 className="text-2xl font-bold mb-4 text-red-600">Number of players missing bracket due to intentional draws</h2>
+                    <h2 className="text-2xl font-bold mb-4 text-red-600">Impact of Intentional Draws</h2>
                     <p className="text-sm text-gray-600 mb-4">
                         This shows how many players would have made a top cut without Intentional Draws (IDs), but were pushed out when IDs were allowed. It measures the negative impact of strategic drawing on players who play out their matches.
                     </p>
                     <div className="grid md:grid-cols-2 gap-x-12">
                         {/* Top 4 Discrepancy */}
                         <div className="bg-red-50 p-4 rounded-lg">
-                            <h4 className="text-lg font-semibold mb-3">Top 4 "Pushed Out" Players (due to IDs)</h4>
-                            <div className="space-y-2 text-sm mb-4">
-                                <div className="flex justify-between"><span>Average players pushed out:</span><span className="font-bold">{discrepancyStats.top4.average}</span></div>
-                                <div className="flex justify-between"><span>Median players pushed out:</span><span className="font-bold">{discrepancyStats.top4.median}</span></div>
-                            </div>
+                            <h4 className="text-lg font-semibold mb-3">Top 4 "Pushed Out" Players</h4>
                             <h5 className="font-semibold mb-2 text-gray-800">Distribution of Pushed Out Players</h5>
                             <div className="space-y-1 max-h-48 overflow-y-auto text-sm">
-                                {Object.entries(discrepancyStats.top4.distribution)
-                                    .sort(([a], [b]) => parseInt(a) - parseInt(b))
-                                    .map(([count, percentage]) => (
-                                        <div key={count} className="flex justify-between">
-                                            <span>{
-                                                count === '0'
-                                                    ? 'No one pushed out'
-                                                    : `${count} player${parseInt(count) === 1 ? '' : 's'}`
-                                            }:</span>
-                                            <span className="font-bold">{percentage}% of sims</span>
-                                        </div>
-                                    ))}
+                                {(() => {
+                                    const distribution = discrepancyStats.top4.distribution;
+                                    const pushedOutEntries = Object.entries(distribution)
+                                        .filter(([count]) => parseInt(count) > 0)
+                                        .map(([count, percentageStr]) => ({ count: parseInt(count), percentage: parseFloat(percentageStr) }))
+                                        .sort((a, b) => a.count - b.count);
+
+                                    const totalPushedOutPercentage = pushedOutEntries.reduce((sum, item) => sum + item.percentage, 0);
+                                    const noPushedOutPercentage = 100 - totalPushedOutPercentage;
+
+                                    let noPushedOutStr;
+                                    let pushedOutStr;
+
+                                    const pushedOutIsRarer = totalPushedOutPercentage < 50;
+                                    const rarePercentage = pushedOutIsRarer ? totalPushedOutPercentage : noPushedOutPercentage;
+
+                                    if (rarePercentage < 0.05) {
+                                        noPushedOutStr = `Almost always (${noPushedOutPercentage.toFixed(1)}%)`;
+                                        pushedOutStr = `Almost never (${totalPushedOutPercentage.toFixed(1)}%)`;
+                                    } else {
+                                        const oneIn = Math.round(100 / rarePercentage);
+                                        if (oneIn > 1) {
+                                            if (pushedOutIsRarer) {
+                                                pushedOutStr = `~1 in ${oneIn} tournaments (${totalPushedOutPercentage.toFixed(1)}%)`;
+                                                noPushedOutStr = `~${oneIn - 1} in ${oneIn} tournaments (${noPushedOutPercentage.toFixed(1)}%)`;
+                                            } else { // No pushed out is rarer
+                                                noPushedOutStr = `~1 in ${oneIn} tournaments (${noPushedOutPercentage.toFixed(1)}%)`;
+                                                pushedOutStr = `~${oneIn - 1} in ${oneIn} tournaments (${totalPushedOutPercentage.toFixed(1)}%)`;
+                                            }
+                                        } else { // Fallback if rounding makes it weird
+                                            noPushedOutStr = `${noPushedOutPercentage.toFixed(1)}%`;
+                                            pushedOutStr = `${totalPushedOutPercentage.toFixed(1)}%`;
+                                        }
+                                    }
+
+                                    return (
+                                        <>
+                                            <div className="flex justify-between">
+                                                <span>No one pushed out:</span>
+                                                <span className="font-bold">{noPushedOutStr}</span>
+                                            </div>
+
+                                            {pushedOutEntries.length > 0 && (
+                                                <>
+                                                    <div className="flex justify-between pt-2">
+                                                        <span className="font-semibold">One or more players pushed out:</span>
+                                                        <span className="font-bold">{pushedOutStr}</span>
+                                                    </div>
+
+                                                    {pushedOutEntries.map(({ count, percentage }) => (
+                                                        <div key={count} className="flex justify-between pl-4">
+                                                            <span>{`${count} player${count === 1 ? '' : 's'}`}:</span>
+                                                            <span className="font-bold">{formatPercentageAsOneIn(percentage.toFixed(1))}</span>
+                                                        </div>
+                                                    ))}
+                                                </>
+                                            )}
+                                        </>
+                                    );
+                                })()}
                             </div>
+                            <details className="text-sm mt-3">
+                                <summary className="cursor-pointer text-gray-600">Show More Stats</summary>
+                                <div className="space-y-2 text-sm mt-2">
+                                    <div className="flex justify-between"><span>Average players pushed out:</span><span className="font-bold">{discrepancyStats.top4.average}</span></div>
+                                    <div className="flex justify-between"><span>Median players pushed out:</span><span className="font-bold">{discrepancyStats.top4.median}</span></div>
+                                </div>
+                            </details>
                         </div>
                         {/* Top 8 Discrepancy */}
                         <div className="bg-red-50 p-4 rounded-lg">
-                            <h4 className="text-lg font-semibold mb-3">Top 8 "Pushed Out" Players (due to IDs)</h4>
-                            <div className="space-y-2 text-sm mb-4">
-                                <div className="flex justify-between"><span>Average players pushed out:</span><span className="font-bold">{discrepancyStats.top8.average}</span></div>
-                                <div className="flex justify-between"><span>Median players pushed out:</span><span className="font-bold">{discrepancyStats.top8.median}</span></div>
-                            </div>
+                            <h4 className="text-lg font-semibold mb-3">Top 8 "Pushed Out" Players</h4>
                             <h5 className="font-semibold mb-2 text-gray-800">Distribution of Pushed Out Players</h5>
                             <div className="space-y-1 max-h-48 overflow-y-auto text-sm">
-                                {Object.entries(discrepancyStats.top8.distribution)
-                                    .sort(([a], [b]) => parseInt(a) - parseInt(b))
-                                    .map(([count, percentage]) => (
-                                        <div key={count} className="flex justify-between">
-                                            <span>{
-                                                count === '0'
-                                                    ? 'No one pushed out'
-                                                    : `${count} player${parseInt(count) === 1 ? '' : 's'}`
-                                            }:</span>
-                                            <span className="font-bold">{percentage}% of sims</span>
-                                        </div>
-                                    ))}
+                                {(() => {
+                                    const distribution = discrepancyStats.top8.distribution;
+                                    const pushedOutEntries = Object.entries(distribution)
+                                        .filter(([count]) => parseInt(count) > 0)
+                                        .map(([count, percentageStr]) => ({ count: parseInt(count), percentage: parseFloat(percentageStr) }))
+                                        .sort((a, b) => a.count - b.count);
+
+                                    const totalPushedOutPercentage = pushedOutEntries.reduce((sum, item) => sum + item.percentage, 0);
+                                    const noPushedOutPercentage = 100 - totalPushedOutPercentage;
+
+                                    let noPushedOutStr;
+                                    let pushedOutStr;
+
+                                    const pushedOutIsRarer = totalPushedOutPercentage < 50;
+                                    const rarePercentage = pushedOutIsRarer ? totalPushedOutPercentage : noPushedOutPercentage;
+
+                                    if (rarePercentage < 0.05) {
+                                        noPushedOutStr = `Almost always (${noPushedOutPercentage.toFixed(1)}%)`;
+                                        pushedOutStr = `Almost never (${totalPushedOutPercentage.toFixed(1)}%)`;
+                                    } else {
+                                        const oneIn = Math.round(100 / rarePercentage);
+                                        if (oneIn > 1) {
+                                            if (pushedOutIsRarer) {
+                                                pushedOutStr = `~1 in ${oneIn} tournaments (${totalPushedOutPercentage.toFixed(1)}%)`;
+                                                noPushedOutStr = `~${oneIn - 1} in ${oneIn} tournaments (${noPushedOutPercentage.toFixed(1)}%)`;
+                                            } else { // No pushed out is rarer
+                                                noPushedOutStr = `~1 in ${oneIn} tournaments (${noPushedOutPercentage.toFixed(1)}%)`;
+                                                pushedOutStr = `~${oneIn - 1} in ${oneIn} tournaments (${totalPushedOutPercentage.toFixed(1)}%)`;
+                                            }
+                                        } else { // Fallback if rounding makes it weird
+                                            noPushedOutStr = `${noPushedOutPercentage.toFixed(1)}%`;
+                                            pushedOutStr = `${totalPushedOutPercentage.toFixed(1)}%`;
+                                        }
+                                    }
+
+                                    return (
+                                        <>
+                                            <div className="flex justify-between">
+                                                <span>No one pushed out:</span>
+                                                <span className="font-bold">{noPushedOutStr}</span>
+                                            </div>
+
+                                            {pushedOutEntries.length > 0 && (
+                                                <>
+                                                    <div className="flex justify-between pt-2">
+                                                        <span className="font-semibold">One or more players pushed out:</span>
+                                                        <span className="font-bold">{pushedOutStr}</span>
+                                                    </div>
+
+                                                    {pushedOutEntries.map(({ count, percentage }) => (
+                                                        <div key={count} className="flex justify-between pl-4">
+                                                            <span>{`${count} player${count === 1 ? '' : 's'}`}:</span>
+                                                            <span className="font-bold">{formatPercentageAsOneIn(percentage.toFixed(1))}</span>
+                                                        </div>
+                                                    ))}
+                                                </>
+                                            )}
+                                        </>
+                                    );
+                                })()}
                             </div>
+                            <details className="text-sm mt-3">
+                                <summary className="cursor-pointer text-gray-600">Show More Stats</summary>
+                                <div className="space-y-2 text-sm mt-2">
+                                    <div className="flex justify-between"><span>Average players pushed out:</span><span className="font-bold">{discrepancyStats.top8.average}</span></div>
+                                    <div className="flex justify-between"><span>Median players pushed out:</span><span className="font-bold">{discrepancyStats.top8.median}</span></div>
+                                </div>
+                            </details>
                         </div>
                     </div>
                 </div>
             )}
 
             {bubbleStats && (
-                <>
-                    <div className="bg-white p-6 rounded-lg border mb-6">
-                        <h3 className="text-2xl font-bold mb-4 text-purple-600">Bubble Analysis</h3>
-                        <p className="text-sm text-gray-600 mb-4">
-                            This analyzes how often players miss a top spot (like Top 4 or Top 8) due to tiebreakers, even when they have the same point total as a player who made the cut. The "bubble" is the number of players ranked just outside the cut-off with the same points.
-                        </p>
-                        <p className="text-sm text-gray-600">
-                            The "With Intentional Draws" simulation models a scenario where players draw if it guarantees a top spot. The Top 4 analysis assumes players aim for a Top 4 cut, and the Top 8 analysis assumes they aim for a Top 8 cut.
-                        </p>
-                    </div>
-                    <div className="grid md:grid-cols-2 gap-x-12">
+                <div className="bg-white p-6 rounded-lg border mb-6">
+                    <p className="text-sm text-gray-600">
+                        The "With Intentional Draws" simulation models a scenario where players draw if it guarantees a top spot. The Top 4 analysis assumes players aim for a Top 4 cut, and the Top 8 analysis assumes they aim for a Top 8 cut.
+                    </p>
+                    <div className="grid md:grid-cols-2 gap-x-12 mt-4">
                         <div>
                             <h2 className="text-2xl font-bold mb-4 text-center">Without Intentional Draws</h2>
                             <ResultsDisplay bubbleStats={bubbleStats} results={results} compareRecords={compareRecords} />
@@ -720,7 +849,7 @@ const SwissTournamentSimulator = () => {
                             </div>
                         )}
                     </div>
-                </>
+                </div>
             )}
         </div>
     );
