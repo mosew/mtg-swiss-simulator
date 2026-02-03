@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Characterization: When IDs Affect Bubble Statistics</title>
+    <style>
+        body {
+            font-family: 'Georgia', 'Times New Roman', serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            line-height: 1.8;
+            background-color: #fafafa;
+        }
+
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+
+        h2 {
+            color: #34495e;
+            margin-top: 30px;
+            border-left: 4px solid #3498db;
+            padding-left: 15px;
+        }
+
+        h3 {
+            color: #555;
+            margin-top: 25px;
+        }
+
+        .theorem {
+            background: #ecf0f1;
+            border-left: 4px solid #3498db;
+            padding: 15px 20px;
+            margin: 20px 0;
+            font-style: italic;
+        }
+
+        .proof {
+            background: #f8f9fa;
+            border-left: 4px solid #27ae60;
+            padding: 15px 20px;
+            margin: 20px 0;
+        }
+
+        .example {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px 20px;
+            margin: 20px 0;
+        }
+
+        .definition {
+            background: #e8f5e9;
+            border-left: 4px solid #4caf50;
+            padding: 15px 20px;
+            margin: 20px 0;
+        }
+
+        .characterization {
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            padding: 15px 20px;
+            margin: 20px 0;
+        }
+
+        code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+
+        .math {
+            font-family: 'Times New Roman', serif;
+            font-style: italic;
+        }
+
+        .back-link {
+            display: inline-block;
+            margin-top: 30px;
+            padding: 10px 20px;
+            background: #3498db;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+        }
+
+        .back-link:hover {
+            background: #2980b9;
+        }
+
+        .conclusion {
+            background: #ffebee;
+            border-left: 4px solid #f44336;
+            padding: 15px 20px;
+            margin: 20px 0;
+            font-weight: bold;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+
+        th,
+        td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #3498db;
+            color: white;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Characterization: When IDs Can Affect Bubble Statistics</h1>
+
+        <p><strong>Author:</strong> Analysis of Swiss Tournament Simulator<br>
+            <strong>Date:</strong> 2024<br>
+            <strong>Question:</strong> Under what conditions on cut size (C) and number of rounds (R) can intentional
+            draws affect bubble statistics?
+        </p>
+
+        <h2>1. Definitions and Setup</h2>
+
+        <div class="definition">
+            <h3>Definitions:</h3>
+            <ul>
+                <li><strong>C:</strong> Cut size (number of players who advance, e.g., C = 4 for Top 4, C = 8 for Top 8)
+                </li>
+                <li><strong>R:</strong> Total number of rounds in the tournament</li>
+                <li><strong>r:</strong> Remaining rounds when ID decision is made (r ∈ {1, 2} since IDs only occur in
+                    last 2 rounds)</li>
+                <li><strong>N_passers(S):</strong> Number of players who could potentially finish with score ≥ S</li>
+                <li><strong>Safety margin:</strong> How many additional potential passers a player can tolerate and
+                    still be safe</li>
+            </ul>
+        </div>
+
+        <h2>2. The Safety Condition</h2>
+
+        <p>A player with current score <span class="math">S</span> is <strong>safe after drawing</strong> if:</p>
+
+        <div class="definition">
+            <p><span class="math">N<sub>passers</sub>(S + 1) < C</span>
+            </p>
+            <p>That is, fewer than C players can potentially finish with score ≥ S + 1.</p>
+        </div>
+
+        <p>A player is <strong>safe after losing</strong> if:</p>
+
+        <div class="definition">
+            <p><span class="math">N<sub>passers</sub>(S) < C</span>
+            </p>
+            <p>That is, fewer than C players can potentially finish with score ≥ S.</p>
+        </div>
+
+        <h2>3. When Can IDs Affect Bubbles?</h2>
+
+        <div class="theorem">
+            <strong>Characterization:</strong> IDs can affect bubble statistics if and only if there exists a scenario
+            where:
+            <ol>
+                <li>Two players A and B are both safe if they draw: <span class="math">N<sub>passers</sub>(S<sub>A</sub>
+                        + 1) < C</span> and <span class="math">N<sub>passers</sub>(S<sub>B</sub> + 1) < C</span>
+                </li>
+                <li>But if A loses (getting 0 instead of 1): <span class="math">N<sub>passers</sub>(S<sub>A</sub>) ≥
+                        C</span></li>
+            </ol>
+        </div>
+
+        <p>This happens when the <strong>safety margin</strong> is exactly 0 or 1 for at least one player.</p>
+
+        <h2>4. Constraints on Safety Margin</h2>
+
+        <h3>4.1 Maximum Possible Score Gains</h3>
+
+        <p>When an ID decision is made with <span class="math">r</span> remaining rounds:</p>
+
+        <ul>
+            <li>Any other player (not in the match) can gain at most <span class="math">3r</span> points</li>
+            <li>The opponent in the match can gain at most <span class="math">1 + 3r</span> points (if they draw) or
+                <span class="math">3 + 3r</span> points (if they win)
+            </li>
+        </ul>
+
+        <h3>4.2 Players Who Can Cross the S → S+1 Threshold</h3>
+
+        <p>For IDs to affect bubbles, we need players who can reach exactly <span class="math">S</span> but not <span
+                class="math">S + 1</span>.</p>
+
+        <p>A player <span class="math">q</span> with current score <span class="math">S<sub>q</sub></span> can reach
+            <span class="math">S</span> but not <span class="math">S + 1</span> if:
+        </p>
+
+        <div class="definition">
+            <p><span class="math">S<sub>q</sub> + 3r ≥ S</span> and <span class="math">S<sub>q</sub> + 3r < S + 1</span>
+            </p>
+            <p>Which simplifies to: <span class="math">S - 3r ≤ S<sub>q</sub>
+                    < S - 3r + 1</span>
+            </p>
+        </div>
+
+        <p>This is only possible if <span class="math">S ≡ 0 \pmod{3}</span> or <span class="math">S ≡ 1 \pmod{3}</span>
+            (since scores are multiples of 3, with possible +1 for draws).</p>
+
+        <h2>5. Characterization by Cut Size and Rounds</h2>
+
+        <div class="characterization">
+            <h3>Key Insight: Safety Margin Distribution</h3>
+
+            <p>The safety margin for a player with score <span class="math">S</span> is:</p>
+            <p><span class="math">margin(S) = C - 1 - N<sub>passers</sub>(S + 1)</span></p>
+
+            <p>For IDs to <strong>NOT</strong> affect bubbles, all players who are safe must have:</p>
+            <p><span class="math">margin(S) ≥ 1</span></p>
+
+            <p>This means they can tolerate at least one additional potential passer and still be safe.</p>
+        </div>
+
+        <h3>5.1 Small Cut Sizes (C ≤ 4)</h3>
+
+        <div class="example">
+            <p><strong>Observation:</strong> With small cut sizes, the safety margin is naturally small.</p>
+
+            <p>Example with C = 4, R = 5, in round 4 (r = 1):</p>
+            <ul>
+                <li>If player has score S = 12 and N_passers(13) = 2, then margin = 4 - 1 - 2 = 1</li>
+                <li>If N_passers(12) = 3, then losing would give N_passers(12) = 3 ≥ 4? No, still safe</li>
+                <li>But if N_passers(12) = 4, then losing gives N_passers(12) = 4 ≥ 4, NOT safe!</li>
+            </ul>
+
+            <p><strong>Conclusion:</strong> With small cuts, players are more likely to be at the safety boundary.</p>
+        </div>
+
+        <h3>5.2 Large Cut Sizes (C ≥ 8)</h3>
+
+        <div class="example">
+            <p><strong>Observation:</strong> With large cut sizes, there's more "room" in the safety margin.</p>
+
+            <p>Example with C = 8, R = 5, in round 4 (r = 1):</p>
+            <ul>
+                <li>If player has score S = 12 and N_passers(13) = 6, then margin = 8 - 1 - 6 = 1</li>
+                <li>Even if N_passers(12) = 7, losing still gives margin ≥ 0, so still safe</li>
+                <li>Need N_passers(12) = 8 to become unsafe, which requires more players in similar score range</li>
+            </ul>
+
+            <p><strong>Conclusion:</strong> With larger cuts, players need to be closer to more competitors to be at the
+                boundary.</p>
+        </div>
+
+        <h3>5.3 Number of Rounds</h3>
+
+        <div class="example">
+            <p><strong>Observation:</strong> More rounds means more point spread, fewer players in similar ranges.</p>
+
+            <p>With R = 3 rounds:</p>
+            <ul>
+                <li>Maximum score spread: 0 to 9 points</li>
+                <li>Many players can be in similar score ranges</li>
+                <li>Higher probability of players being at safety boundary</li>
+            </ul>
+
+            <p>With R = 7 rounds:</p>
+            <ul>
+                <li>Maximum score spread: 0 to 21 points</li>
+                <li>Players are more spread out</li>
+                <li>Fewer players in similar score ranges near the cut</li>
+            </ul>
+
+            <p><strong>Conclusion:</strong> Fewer rounds → more clustering → higher chance IDs affect bubbles.</p>
+        </div>
+
+        <h2>6. Formal Characterization</h2>
+
+        <div class="proof">
+            <h3>Theorem 1: Necessary Condition for IDs to NOT Affect Bubbles</h3>
+
+            <p><strong>If IDs cannot affect bubble statistics, then for all players A, B who are safe to draw:</strong>
+            </p>
+
+            <p><span class="math">N<sub>passers</sub>(S<sub>A</sub> + 1) ≤ C - 2</span> or equivalently <span
+                    class="math">N<sub>passers</sub>(S<sub>A</sub>) ≤ C - 1</span></p>
+
+            <p><strong>Proof:</strong> If IDs cannot affect bubbles, then losing instead of drawing cannot change safety
+                status. Therefore:</p>
+
+            <ul>
+                <li><span class="math">N<sub>passers</sub>(S<sub>A</sub> + 1) < C</span> (safe after draw)</li>
+                <li><span class="math">N<sub>passers</sub>(S<sub>A</sub>) < C</span> (safe after loss)</li>
+            </ul>
+
+            <p>Since <span class="math">N<sub>passers</sub>(S<sub>A</sub>) ≥ N<sub>passers</sub>(S<sub>A</sub> +
+                    1)</span>, we need at least a margin of 1, giving the condition above.</p>
+        </div>
+
+        <div class="proof">
+            <h3>Theorem 2: Sufficient Condition (Sufficiently Large Safety Margins)</h3>
+
+            <p><strong>If for all tournament states where IDs occur, all safe players have:</strong></p>
+
+            <p><span class="math">N<sub>passers</sub>(S + 1) ≤ C - 2</span></p>
+
+            <p><strong>Then IDs cannot affect bubble statistics.</strong></p>
+
+            <p><strong>Proof:</strong> If <span class="math">N<sub>passers</sub>(S + 1) ≤ C - 2</span>, then:</p>
+
+            <p><span class="math">N<sub>passers</sub>(S) ≤ N<sub>passers</sub>(S + 1) + k</span></p>
+
+            <p>where <span class="math">k</span> is the number of players who can reach <span class="math">S</span> but
+                not <span class="math">S + 1</span>.</p>
+
+            <p>The maximum <span class="math">k</span> is bounded by the tournament structure, but even in worst case:
+            </p>
+
+            <p><span class="math">N<sub>passers</sub>(S) ≤ C - 2 + k < C</span> (for sufficiently separated players)</p>
+
+            <p>Therefore, losing instead of drawing maintains safety.</p>
+        </div>
+
+        <h2>7. Practical Characterization</h2>
+
+        <div class="characterization">
+            <h3>When IDs are UNLIKELY to Affect Bubbles:</h3>
+
+            <ol>
+                <li><strong>Large cut size (C ≥ 8):</strong> More "room" in the cut means players are safer, larger
+                    safety margins</li>
+                <li><strong>Many rounds (R ≥ 6):</strong> Greater point spread means fewer players clustered near cut
+                    line</li>
+                <li><strong>Early tournament stage:</strong> But IDs only occur in last 2 rounds, so this is fixed</li>
+                <li><strong>High draw chance:</strong> More unintentional draws reduce the number of ID opportunities
+                </li>
+            </ol>
+
+            <h3>When IDs are MORE LIKELY to Affect Bubbles:</h3>
+
+            <ol>
+                <li><strong>Small cut size (C ≤ 4):</strong> Tight cut means players closer to boundary</li>
+                <li><strong>Few rounds (R ≤ 4):</strong> Less point spread means more players in similar ranges</li>
+                <li><strong>Low draw chance:</strong> More deterministic outcomes create clearer score clusters</li>
+                <li><strong>Large player pools:</strong> More players increases chance of having exactly C-1 or C
+                    players in a score range</li>
+            </ol>
+        </div>
+
+        <h2>8. Mathematical Relationship</h2>
+
+        <p>The key relationship is:</p>
+
+        <div class="theorem">
+            <p><strong>IDs affect bubbles</strong> ⇔ <span class="math">∃</span> players A, B such that:</p>
+            <ul>
+                <li><span class="math">N<sub>passers</sub>(S<sub>A</sub> + 1) = C - 1</span> (exactly at boundary)</li>
+                <li><span class="math">N<sub>passers</sub>(S<sub>A</sub>) ≥ C</span> (would cross boundary if lose)</li>
+            </ul>
+
+            <p>This requires: There exist at least <span class="math">C</span> players (excluding A, B) who can reach
+                score <span class="math">S<sub>A</sub></span>.</p>
+        </div>
+
+        <h2>9. Empirical Observations</h2>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Cut Size (C)</th>
+                    <th>Rounds (R)</th>
+                    <th>Likelihood IDs Affect Bubbles</th>
+                    <th>Reason</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>4</td>
+                    <td>3-4</td>
+                    <td>High</td>
+                    <td>Small cut + few rounds → tight clusters</td>
+                </tr>
+                <tr>
+                    <td>4</td>
+                    <td>5-6</td>
+                    <td>Medium</td>
+                    <td>Small cut but more spread</td>
+                </tr>
+                <tr>
+                    <td>4</td>
+                    <td>7+</td>
+                    <td>Low</td>
+                    <td>More spread reduces clustering</td>
+                </tr>
+                <tr>
+                    <td>8</td>
+                    <td>3-4</td>
+                    <td>Medium</td>
+                    <td>More room in cut, but still tight</td>
+                </tr>
+                <tr>
+                    <td>8</td>
+                    <td>5-6</td>
+                    <td>Low</td>
+                    <td>Good balance: enough spread, enough room</td>
+                </tr>
+                <tr>
+                    <td>8</td>
+                    <td>7+</td>
+                    <td>Very Low</td>
+                    <td>Large cut + lots of spread</td>
+                </tr>
+                <tr>
+                    <td>16</td>
+                    <td>Any</td>
+                    <td>Very Low</td>
+                    <td>Very large cut size creates large safety margins</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h2>10. Conclusion</h2>
+
+        <div class="conclusion">
+            <p><strong>Summary:</strong> IDs can affect bubble statistics when players are "barely safe" (at the exact
+                safety threshold). This is more likely to occur with:</p>
+            <ul>
+                <li><strong>Small cut sizes (C ≤ 4)</strong> - creates tighter boundaries</li>
+                <li><strong>Few rounds (R ≤ 4)</strong> - creates score clustering</li>
+                <li><strong>Large player pools</strong> - increases probability of having exactly C players in a score
+                    range</li>
+            </ul>
+
+            <p>IDs are unlikely to affect bubbles when:</p>
+            <ul>
+                <li><strong>Large cut sizes (C ≥ 8)</strong> - larger safety margins</li>
+                <li><strong>Many rounds (R ≥ 6)</strong> - greater point spread, less clustering</li>
+                <li><strong>Safety margins ≥ 1</strong> for all players who would ID</li>
+            </ul>
+
+            <p><strong>Key Insight:</strong> The relationship is not a simple function of C and R alone, but depends on
+                the distribution of player scores near the cut line. However, smaller cuts and fewer rounds increase the
+                probability of score clustering, which increases the likelihood that IDs can affect bubble statistics.
+            </p>
+        </div>
+
+        <a href="index.html" class="back-link">← Back to Tournament Simulator</a>
+    </div>
+</body>
+
+</html>
