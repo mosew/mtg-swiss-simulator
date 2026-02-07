@@ -1,29 +1,77 @@
 import React, { useState } from 'react';
 
+// --- Intentional draw safety (aligned with Python tournament/match.py) ---
+// 9th place overall = 7th-highest among others (we and opponent take 2 of top 9).
+
+/** Swiss-constrained max 7th-highest score after n rounds. Each round only ~half of each score group can win. */
+function maxSeventhAfterNRounds(scores, rounds = 2) {
+    if (!scores || scores.length < 7) return -1;
+    let current = [...scores];
+    for (let r = 0; r < rounds; r++) {
+        const groups = {};
+        current.forEach(s => {
+            groups[s] = (groups[s] || 0) + 1;
+        });
+        const nextScores = [];
+        Object.keys(groups)
+            .map(Number)
+            .sort((a, b) => b - a)
+            .forEach(s => {
+                const count = groups[s];
+                const winners = Math.floor((count + 1) / 2);
+                for (let i = 0; i < winners; i++) nextScores.push(s + 3);
+                for (let i = 0; i < count - winners; i++) nextScores.push(s);
+            });
+        current = nextScores;
+    }
+    current.sort((a, b) => b - a);
+    return current[6];
+}
+
+/** Earlier rounds: only ~half of each score group can win each round (Swiss heuristic). */
+function isSafeEarlierRound(player, opponent, allPlayers, cutSize, playerScoreAfterDraw, roundsRemaining) {
+    const scoreGroups = {};
+    allPlayers.forEach(p => {
+        if (p.id === player.id || p.id === opponent.id) return;
+        const currentScore = p.points;
+        const maxPossibleScore = currentScore + 3 * (1 + roundsRemaining);
+        if (maxPossibleScore > playerScoreAfterDraw) {
+            scoreGroups[currentScore] = (scoreGroups[currentScore] || 0) + 1;
+        }
+    });
+    let realisticThreats = 0;
+    Object.values(scoreGroups).forEach(count => {
+        realisticThreats += Math.floor((count + 1) / 2);
+    });
+    return realisticThreats < cutSize;
+}
+
 const isSafeForCut = (player, opponent, allPlayers, cut, currentRound, totalRounds) => {
     const playerScoreAfterDraw = player.points + 1;
-    const minFinalPlayerScore = playerScoreAfterDraw; // Assumes losing all remaining matches
+    const roundsRemaining = totalRounds - currentRound;
 
-    let potentialPassers = 0;
-    for (const p of allPlayers) {
-        if (p.id === player.id) continue;
+    const others = allPlayers
+        .filter(p => p.id !== player.id && p.id !== opponent.id)
+        .sort((a, b) => (b.points !== a.points ? b.points - a.points : a.id - b.id));
 
-        let maxPossibleScore;
-        // For the opponent in the match, they also get 1 point from the draw.
-        if (p.id === opponent.id) {
-            maxPossibleScore = p.points + 1 + 3 * (totalRounds - currentRound);
-        } else {
-            // Other players can win their matches in this and all subsequent rounds.
-            maxPossibleScore = p.points + 3 * (totalRounds - (currentRound - 1));
-        }
+    if (others.length < cut) return true;
+    const seventhBestOtherPoints = others[cut - 2].points;
 
-        // We assume worst-case for tiebreakers, so if scores can be equal, they can pass.
-        if (maxPossibleScore >= minFinalPlayerScore) {
-            potentialPassers++;
-        }
+    if (roundsRemaining === 0) {
+        // Final round: safe iff our score after draw > max possible score of 9th place (7th-best other + 3).
+        const maxNinthPlace = seventhBestOtherPoints + 3;
+        return playerScoreAfterDraw > maxNinthPlace;
     }
 
-    return potentialPassers < cut;
+    if (roundsRemaining === 1) {
+        // Penultimate: safe iff X-0-2 is above 9th at end. Use Swiss-constrained max 7th-highest.
+        const ourScoreAfterTwoDraws = player.points + 2;
+        const otherScores = others.map(p => p.points);
+        const maxSeventh = maxSeventhAfterNRounds(otherScores, 2);
+        return ourScoreAfterTwoDraws > maxSeventh;
+    }
+
+    return isSafeEarlierRound(player, opponent, allPlayers, cut, playerScoreAfterDraw, roundsRemaining);
 };
 
 const SwissTournamentSimulator = () => {
