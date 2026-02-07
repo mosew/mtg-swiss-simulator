@@ -102,7 +102,7 @@ class TestIntentionalDrawChecker(unittest.TestCase):
         self.assertFalse(is_safe)
 
     def test_penultimate_round_safe(self):
-        """Test ID safety in round 4 of 5: safe only if X-0-2 beats max 9th place."""
+        """Test ID in round 4 of 5: 12-pt players can draw out (12+2 > max_9th); 4 at 12 = even, pairing-closed."""
         players = []
 
         # 4 players at 12 points — if they ID now and in R5, they have 14
@@ -131,12 +131,11 @@ class TestIntentionalDrawChecker(unittest.TestCase):
             total_rounds=5,
         )
 
-        # 14 (our score after two draws) > 12 (max 9th place), so safe
+        # 12+2 > max_9th (7th among others after 2 rounds); 4 draw-safe at 12, even
         self.assertTrue(is_safe)
 
     def test_penultimate_round_safe_with_swiss_constraint(self):
-        """9-point players in R4 of 5: X-0-2 = 11; with Swiss only ~half of 6pt group
-        can win each round, so max 7th-highest among others is 9, not 12 → safe."""
+        """9-pt players in R4 of 5: 1 round left; Swiss-constrained max 9th = 9, so 9+1 > 9 → draw-safe; 4 at 9 = even."""
         players = []
         for i in range(4):
             p = Player(i)
@@ -229,6 +228,88 @@ class TestIntentionalDrawChecker(unittest.TestCase):
 
         # With exactly 8 threats, should NOT be safe (need < 8)
         self.assertFalse(is_safe)
+
+    def test_final_round_mismatched_scores_no_id(self):
+        """
+        ID must not be allowed when the opponent would not make the cut.
+
+        Scenario: final round, player A has 13 pts, player B has 10 pts.
+        Set "others" so 7th-best other = 10 → max_ninth_place = 13. Then
+        A with 14 pts would be safe (14 > 13), but B with 11 pts would not
+        (11 > 13 is false). So the pair must NOT be allowed to ID.
+        """
+        players = []
+
+        # Pair considering ID: 13 pts vs 10 pts
+        p_high = Player(34)
+        p_high.points = 13
+        players.append(p_high)
+
+        p_low = Player(0)
+        p_low.points = 10
+        players.append(p_low)
+
+        # 6 others at 12 pts, 8 at 10 pts → 7th-best other = 10, max_ninth = 13
+        for i in range(1, 7):
+            p = Player(i)
+            p.points = 12
+            players.append(p)
+        for i in range(7, 15):
+            p = Player(i)
+            p.points = 10
+            players.append(p)
+        for i in range(15, 26):
+            p = Player(i)
+            p.points = 6
+            players.append(p)
+
+        is_safe = IntentionalDrawChecker.is_safe_for_cut(
+            player=p_high,   # 13 pts → 14 after draw
+            opponent=p_low,  # 10 pts → 11 after draw
+            all_players=players,
+            cut_size=8,
+            current_round=6,
+            total_rounds=6,
+        )
+
+        self.assertFalse(
+            is_safe,
+            "Intentional draw must not be allowed when opponent would not make cut",
+        )
+
+    def test_penultimate_round_odd_draw_safe_no_id(self):
+        """
+        ID not allowed when draw-safe set is not closed under pairing:
+        3 players at 12 pts in R4 of 5 → odd count at that score, so one would
+        be paired with a non-draw-safe player next round.
+        """
+        players = []
+        for i in range(3):
+            p = Player(i)
+            p.points = 12
+            players.append(p)
+        for i in range(3, 14):
+            p = Player(i)
+            p.points = 6
+            players.append(p)
+        for i in range(14, 26):
+            p = Player(i)
+            p.points = 3
+            players.append(p)
+
+        is_safe = IntentionalDrawChecker.is_safe_for_cut(
+            player=players[0],
+            opponent=players[1],
+            all_players=players,
+            cut_size=8,
+            current_round=4,
+            total_rounds=5,
+        )
+
+        self.assertFalse(
+            is_safe,
+            "ID not allowed when draw-safe count at a score level is odd",
+        )
 
 
 if __name__ == "__main__":

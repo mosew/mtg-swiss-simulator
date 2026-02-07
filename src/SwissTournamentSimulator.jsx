@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 
 // --- Intentional draw safety (aligned with Python tournament/match.py) ---
-// 9th place overall = 7th-highest among others (we and opponent take 2 of top 9).
+// Final round: both make cut with the draw. Earlier rounds: both can afford to
+// draw every subsequent round and only be paired with others who can too.
 
 /** Swiss-constrained max 7th-highest score after n rounds. Each round only ~half of each score group can win. */
 function maxSeventhAfterNRounds(scores, rounds = 2) {
@@ -28,50 +29,45 @@ function maxSeventhAfterNRounds(scores, rounds = 2) {
     return current[6];
 }
 
-/** Earlier rounds: only ~half of each score group can win each round (Swiss heuristic). */
-function isSafeEarlierRound(player, opponent, allPlayers, cutSize, playerScoreAfterDraw, roundsRemaining) {
-    const scoreGroups = {};
+/** True if both can afford to draw in each subsequent round and the draw-safe set is closed under pairing. */
+function canDrawOutAndPairingClosed(player, opponent, allPlayers, others, cutSize, roundsRemaining) {
+    if (roundsRemaining <= 0) return false;
+    const otherScores = others.map(p => p.points);
+    const maxNinthAtEnd = maxSeventhAfterNRounds(otherScores, roundsRemaining);
+    if (maxNinthAtEnd < 0) return true;
+
+    const canAffordDrawOut = (p) => p.points + roundsRemaining > maxNinthAtEnd;
+    if (!canAffordDrawOut(player) || !canAffordDrawOut(opponent)) return false;
+
+    const scoreToDrawSafeCount = {};
     allPlayers.forEach(p => {
-        if (p.id === player.id || p.id === opponent.id) return;
-        const currentScore = p.points;
-        const maxPossibleScore = currentScore + 3 * (1 + roundsRemaining);
-        if (maxPossibleScore > playerScoreAfterDraw) {
-            scoreGroups[currentScore] = (scoreGroups[currentScore] || 0) + 1;
-        }
+        if (!canAffordDrawOut(p)) return;
+        scoreToDrawSafeCount[p.points] = (scoreToDrawSafeCount[p.points] || 0) + 1;
     });
-    let realisticThreats = 0;
-    Object.values(scoreGroups).forEach(count => {
-        realisticThreats += Math.floor((count + 1) / 2);
-    });
-    return realisticThreats < cutSize;
+    for (const count of Object.values(scoreToDrawSafeCount)) {
+        if (count % 2 !== 0) return false;
+    }
+    return true;
 }
 
 const isSafeForCut = (player, opponent, allPlayers, cut, currentRound, totalRounds) => {
     const playerScoreAfterDraw = player.points + 1;
+    const opponentScoreAfterDraw = opponent.points + 1;
     const roundsRemaining = totalRounds - currentRound;
 
-    const others = allPlayers
-        .filter(p => p.id !== player.id && p.id !== opponent.id)
-        .sort((a, b) => (b.points !== a.points ? b.points - a.points : a.id - b.id));
-
+    const others = allPlayers.filter(p => p.id !== player.id && p.id !== opponent.id);
     if (others.length < cut) return true;
-    const seventhBestOtherPoints = others[cut - 2].points;
 
     if (roundsRemaining === 0) {
-        // Final round: safe iff our score after draw > max possible score of 9th place (7th-best other + 3).
+        const sortedOthers = [...others].sort((a, b) =>
+            b.points !== a.points ? b.points - a.points : a.id - b.id
+        );
+        const seventhBestOtherPoints = sortedOthers[cut - 2].points;
         const maxNinthPlace = seventhBestOtherPoints + 3;
-        return playerScoreAfterDraw > maxNinthPlace;
+        return playerScoreAfterDraw > maxNinthPlace && opponentScoreAfterDraw > maxNinthPlace;
     }
 
-    if (roundsRemaining === 1) {
-        // Penultimate: safe iff X-0-2 is above 9th at end. Use Swiss-constrained max 7th-highest.
-        const ourScoreAfterTwoDraws = player.points + 2;
-        const otherScores = others.map(p => p.points);
-        const maxSeventh = maxSeventhAfterNRounds(otherScores, 2);
-        return ourScoreAfterTwoDraws > maxSeventh;
-    }
-
-    return isSafeEarlierRound(player, opponent, allPlayers, cut, playerScoreAfterDraw, roundsRemaining);
+    return canDrawOutAndPairingClosed(player, opponent, allPlayers, others, cut, roundsRemaining);
 };
 
 const SwissTournamentSimulator = () => {
@@ -144,9 +140,7 @@ const SwissTournamentSimulator = () => {
         }
 
         if (useID && totalRounds > 0 && totalRounds - currentRound <= 2) {
-            const p1Safe = isSafeForCut(player1, player2, allPlayers, cutSize, currentRound, totalRounds);
-            const p2Safe = isSafeForCut(player2, player1, allPlayers, cutSize, currentRound, totalRounds);
-            if (p1Safe && p2Safe) {
+            if (isSafeForCut(player1, player2, allPlayers, cutSize, currentRound, totalRounds)) {
                 return { winner: null, loser: null, draw: true, bye: false };
             }
         }
@@ -966,7 +960,7 @@ const SwissTournamentSimulator = () => {
                         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
                             <p className="text-sm text-yellow-800 font-semibold mb-2">Why Bubble Analyses May Be Identical</p>
                             <p className="text-sm text-yellow-700 mb-2">
-                                Intentional draws only occur when <strong>both players would still make the cut</strong> even after drawing (i.e., they are already "safe" for the cut).
+                                Intentional draws only occur when <strong>both players would still make the cut</strong>: in the final round, both must make the cut with the draw; in earlier rounds, both must be able to draw every subsequent round and only be paired with others who can do the same (draw-safe set closed under pairing).
                                 Since bubble analysis measures players <strong>just outside the cut</strong> who have the same point total as the cut position, intentional draws
                                 typically don't affect bubble sizes. This is because the players drawing intentionally are already safely qualified and aren't at the bubble.
                                 If you observe identical bubble statistics, this is expected behavior and indicates that intentional draws are primarily occurring between

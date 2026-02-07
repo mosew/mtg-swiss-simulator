@@ -70,63 +70,57 @@ class IntentionalDrawChecker:
             total_rounds: Total number of rounds
 
         Returns:
-            True if both players would be safe for the cut after drawing
+            True if both players can safely ID: final round = both make cut with
+            the draw; earlier rounds = both can afford to draw every subsequent
+            round and only be paired with others who can too (draw-safe set
+            closed under pairing).
         """
         player_score_after_draw = player.points + 1
+        opponent_score_after_draw = opponent.points + 1
         rounds_remaining_after_current = total_rounds - current_round
 
         # All others (excluding this pair); sorted by points desc
-        others = sorted(
-            (p for p in all_players if p.id != player.id and p.id != opponent.id),
-            key=lambda p: (-p.points, p.id),
-        )
-        # 9th place overall = 7th-highest among others (we and opponent take 2 of top 9)
+        others = [
+            p for p in all_players if p.id != player.id and p.id != opponent.id
+        ]
         if len(others) < cut_size:
             return True
-        seventh_best_other_points = others[cut_size - 2].points  # 7th = index 5 for cut=8
 
         if rounds_remaining_after_current == 0:
-            # Final round: ID only if our score after draw is above the max
+            # Final round: ID only if BOTH players' score after draw is above the max
             # possible score of whoever finishes 9th (at end of tournament).
-            # 9th's max = 7th-best other + 3 (they win their last round).
+            sorted_others = sorted(others, key=lambda p: (-p.points, p.id))
+            seventh_best_other_points = sorted_others[cut_size - 2].points
             max_ninth_place = seventh_best_other_points + 3
-            return player_score_after_draw > max_ninth_place
-
-        if rounds_remaining_after_current == 1:
-            # Penultimate: ID only if our X-0-2 will be above 9th at end of tournament.
-            # 9th = 7th-highest among others. With Swiss, only ~half of each score
-            # group can win each round, so we use a Swiss-constrained max 7th-highest.
-            our_score_after_two_draws = player.points + 2
-            max_seventh_after_two_rounds = (
-                IntentionalDrawChecker._max_seventh_after_n_rounds(
-                    [p.points for p in others], rounds=2
-                )
+            return (
+                player_score_after_draw > max_ninth_place
+                and opponent_score_after_draw > max_ninth_place
             )
-            return our_score_after_two_draws > max_seventh_after_two_rounds
 
-        # Earlier rounds: use Swiss heuristic — only ~half of each score
-        # group can win each round
-        return IntentionalDrawChecker._is_safe_earlier_round(
+        # Penultimate or earlier: ID only if (1) both can afford to draw in
+        # each subsequent round and still make cut, and (2) in each subsequent
+        # round they would only be paired with players who can also afford to
+        # draw from that round onward (draw-safe set is closed under pairing).
+        return IntentionalDrawChecker._can_draw_out_and_pairing_closed(
             player,
             opponent,
             all_players,
+            others,
             cut_size,
-            player_score_after_draw,
             rounds_remaining_after_current,
         )
 
     @staticmethod
-    def _max_seventh_after_n_rounds(scores: List[int], rounds: int = 2) -> int:
+    def _max_seventh_after_n_rounds(scores: List[int], rounds: int) -> int:
         """
-        Swiss-constrained max 7th-highest score after n rounds. Each round,
+        Swiss-constrained max 7th-highest score after n rounds. Each round
         only ~half of each score group can win (they play each other).
-        Returns the 7th-largest in the resulting distribution (for max 9th place).
+        Used to bound max possible 9th place at end of tournament.
         """
         if not scores or len(scores) < 7:
             return -1
         current = list(scores)
         for _ in range(rounds):
-            # Group by score; from each group ceil(count/2) get +3, rest +0
             groups: dict = defaultdict(list)
             for s in current:
                 groups[s].append(s)
@@ -141,37 +135,53 @@ class IntentionalDrawChecker:
         return current[6]  # 7th-highest
 
     @staticmethod
-    def _is_safe_earlier_round(
+    def _can_draw_out_and_pairing_closed(
         player: Player,
         opponent: Player,
         all_players: List[Player],
+        others: List[Player],
         cut_size: int,
-        player_score_after_draw: int,
         rounds_remaining: int,
     ) -> bool:
         """
-        Check safety for earlier rounds using Swiss pairing heuristic.
+        True if both can afford to draw in each subsequent round and make the
+        cut, and in each subsequent round they would only be paired with
+        players who can also afford to draw from that round onward.
 
-        Groups players by score and assumes roughly half will win each round
-        (since similar-scored players are paired together).
+        So: (1) draw-safe = players for whom score + rounds_remaining > max_9th
+        at end; (2) at every score level, count of draw-safe must be even so
+        they pair only with each other under Swiss.
         """
-        score_groups: dict = {}
+        if rounds_remaining <= 0:
+            return False
+        other_scores = [p.points for p in others]
+        max_ninth_at_end = IntentionalDrawChecker._max_seventh_after_n_rounds(
+            other_scores, rounds_remaining
+        )
+        if max_ninth_at_end < 0:
+            return True
 
+        # Can afford to draw in each subsequent round => score + R > max_9th
+        def can_afford_draw_out(p: Player) -> bool:
+            return p.points + rounds_remaining > max_ninth_at_end
+
+        if not can_afford_draw_out(player) or not can_afford_draw_out(opponent):
+            return False
+
+        # Draw-safe set must be closed under Swiss pairing: at every score
+        # level, an even number of draw-safe players (so they pair only with
+        # each other).
+        score_to_draw_safe_count: dict = {}
         for p in all_players:
-            if p.id == player.id or p.id == opponent.id:
+            if not can_afford_draw_out(p):
                 continue
-
-            current_score = p.points
-            max_possible_score = current_score + 3 * (1 + rounds_remaining)
-
-            if max_possible_score > player_score_after_draw:
-                score_groups[current_score] = score_groups.get(current_score, 0) + 1
-
-        realistic_threats = 0
-        for count in score_groups.values():
-            realistic_threats += (count + 1) // 2
-
-        return realistic_threats < cut_size
+            score_to_draw_safe_count[p.points] = (
+                score_to_draw_safe_count.get(p.points, 0) + 1
+            )
+        for count in score_to_draw_safe_count.values():
+            if count % 2 != 0:
+                return False
+        return True
 
 
 class MatchSimulator:
@@ -212,7 +222,8 @@ class MatchSimulator:
             result.winner = player1
             return result
 
-        # Check for intentional draw (if enabled and in last 2 rounds)
+        # Check for intentional draw in final two rounds: final round = both make
+        # cut with the draw; penultimate/earlier = both already locked in.
         if allow_intentional_draws and total_rounds > 0:
             if (total_rounds - current_round) <= 2:
                 if all_players:
